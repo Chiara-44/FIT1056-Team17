@@ -64,6 +64,7 @@ class ScheduleManager:
                 r.get("id"),
                 r.get("name", ""),
                 r.get("allergens", []),
+                r.get("may_contain", []),
                 r.get("preferences", []),
                 r.get("quantity", 0),
             )
@@ -157,8 +158,8 @@ class ScheduleManager:
 
     # ---------- Storeroom ----------
 
-    def add_item(self, name, allergens, preferences, quantity=0):
-        item = FoodbankItem(self.next_item_id, name, allergens, preferences, quantity)
+    def add_item(self, name, allergens, may_contain, preferences, quantity=0):
+        item = FoodbankItem(self.next_item_id, name, allergens, may_contain, preferences, quantity)
         self.storeroom.append(item)
         self.next_item_id += 1
         self._save_data()

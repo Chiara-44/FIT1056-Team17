@@ -1,3 +1,8 @@
+from app.storeroom import ALLERGENS
+
+SEVERITIES = ("mild", "moderate", "severe")
+
+
 class Client:
     """Holds a foodbank client and their dietary needs."""
 
@@ -5,9 +10,30 @@ class Client:
         self.id = id
         self.name = name
         self.phone = phone
-        self.allergies = set(allergies)      # allergens the client must avoid
-        self.preferences = set(preferences)  # diets the client follows, e.g. "vegan"
+        self.allergies = self._clean_allergies(allergies)  # e.g. {"peanuts": "severe"}
+        self.preferences = set(preferences)                # diets the client follows, e.g. "vegan"
         self.household_size = household_size
+
+    def _clean_allergies(self, allergies):
+        """Checks allergen names and severities. Raises ValueError on anything invalid."""
+        # Old data stored allergies as a plain list; treat those as severe to be safe
+        if isinstance(allergies, list):
+            allergies = {a: "severe" for a in allergies}
+
+        cleaned = {}
+        for allergen, severity in allergies.items():
+            allergen = allergen.strip().lower()
+            severity = severity.strip().lower()
+            if allergen not in ALLERGENS:
+                raise ValueError(f"Unknown allergen: '{allergen}'")
+            if severity not in SEVERITIES:
+                raise ValueError(f"Severity for {allergen} must be one of {SEVERITIES}, got '{severity}'")
+            cleaned[allergen] = severity
+        return cleaned
+
+    def severe_allergies(self):
+        """Allergens marked severe, for the packer warning (FR-15, FR-17)."""
+        return sorted(a for a, s in self.allergies.items() if s == "severe")
 
     def can_have(self, item):
         """True if the foodbank item is safe for this client."""
@@ -18,7 +44,7 @@ class Client:
             "id": self.id,
             "name": self.name,
             "phone": self.phone,
-            "allergies": sorted(self.allergies),
+            "allergies": dict(self.allergies),
             "preferences": sorted(self.preferences),
             "household_size": self.household_size,
         }
