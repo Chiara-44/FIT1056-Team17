@@ -1,0 +1,14 @@
+{
+    "volunteers": [
+        {"id": 1, "name": "Sam Lee", "username": "sam", "password": "vol123", "role": "volunteer"}
+    ],
+    "staff": [
+        {"id": 1, "name": "Priya Shah", "username": "priya", "password": "staff123", "role": "staff"}
+    ],
+    "admins": [
+        {"id": 1, "name": "Admin", "username": "admin", "password": "admin123", "role": "admin"}
+    ],
+    "next_volunteer_id": 2,
+    "next_staff_id": 2,
+    "next_admin_id": 2
+}
