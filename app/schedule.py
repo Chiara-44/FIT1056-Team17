@@ -1,6 +1,6 @@
 import json
 import os
-from app.user import User
+from app.users import User, volunteerUser, staffUser, adminUser
 
 ROLES = ("volunteer", "staff", "admin")
 
@@ -65,7 +65,7 @@ class ScheduleManager:
             "volunteers": [u.to_dict() for u in self.volunteers],
             "staff": [u.to_dict() for u in self.staff],
             "admins": [u.to_dict() for u in self.admins],
-            
+
             "next_volunteer_id": self.next_volunteer_id,
             "next_staff_id": self.next_staff_id,
             "next_admin_id": self.next_admin_id,
@@ -98,3 +98,46 @@ class ScheduleManager:
 
     def logout(self):
         self.current_user = None
+
+
+    #TODO ---------- CRUD features for all users ---------- 
+    # These are not edited yet !
+
+    def add_volunteer (self, name, speciality):
+            """Adds a volunteer dictionary to the data store."""
+            #Create a new volunteerUser object with 'id', 'name', and 'speciality'
+            volunteer = volunteerUser(self.next_volunteer_id, name, speciality)
+            #Append the new object to the volunteers list.
+            self.volunteers.append(volunteer)
+            #Increment the 'next_volunteer_id'
+            self.next_volunteer_id += 1
+            self._save_data()
+            print(f"Core: volunteer '{name}' added.")
+    
+    def update_volunteer(self, id, **fields):
+        """Finds a volunteer by ID and updates their data with provided fields."""
+        # Loop through the volunteers list.
+        for volunteer in self.volunteers:
+            # If a volunteer's 'id' matches id:
+            if volunteer.volunteer_id == id:
+                # Update fields
+                for key, value in fields.items():
+                    setattr(volunteer, key, value)
+                print(f"volunteer {id} updated.")
+                self._save_data()
+                return
+        print(f"Error: volunteer with ID {id} not found.")
+    
+    def remove_volunteer(self, id):
+        """Removes a volunteer from the data store."""
+        # Find the volunteer with the matching ID.
+        for volunteer in self.volunteers:
+        # If found, use the .remove() method on the list to delete it.
+                if volunteer.volunteer_id == id:
+                self.volunteers.remove(volunteer)
+                print(f"volunteer {id} deleted.")
+                self._save_data()
+                return
+        print(f"Error: volunteer with ID {id} not found.")
+    
+    
