@@ -17,6 +17,8 @@ ROLES = ("volunteer", "staff", "admin")
 class ScheduleManager:
     """The main controller for all business logic and data handling."""
 
+    # TODO: Resolve the default data path relative to the project, not the launch directory.
+    # TODO: Keep JSON persistence and update the SRS storage plan to match this decision.
     def __init__(self, data_path="data/FST.json"):
         self.data_path = data_path
 
@@ -38,6 +40,7 @@ class ScheduleManager:
 
     # ---------- Loading helpers ----------
 
+    # TODO: Validate record roles against ROLES and the containing role collection.
     def _build_users(self, records, role):
         users = []
         for r in records:
@@ -86,6 +89,8 @@ class ScheduleManager:
 
     # ---------- Load / save ----------
 
+    # TODO: Validate record types, required fields and ID counters before accepting data.
+    # TODO: Preserve corrupt files and prevent an accidental empty-state overwrite.
     def _load_data(self):
         """Loads data from the JSON file and populates the object lists."""
         try:
@@ -116,6 +121,9 @@ class ScheduleManager:
             self._save_data()
             self._needs_resave = False
 
+    # TODO: Write JSON to a temporary file, then atomically replace the data file.
+    # TODO: Lock the full read-check-update-save operation to prevent lost stock updates.
+    # TODO [TEST]: Verify restart recovery, write failures and competing stock updates.
     def _save_data(self):
         """Converts object lists back to dictionaries and saves to JSON."""
         data_to_save = {
@@ -145,6 +153,7 @@ class ScheduleManager:
             "admin": self.admins,
         }.get(role)
 
+    # TODO: Define failed-login session behaviour; a failed attempt currently retains current_user.
     def login(self, username, password, role):
         """Returns the matching User and sets current_user, or None if login fails."""
         users = self._users_for_role(role)
@@ -159,6 +168,8 @@ class ScheduleManager:
     def logout(self):
         self.current_user = None
 
+    # TODO [FR-02..03]: Require manage_users permission before creating accounts.
+    # TODO: Define a separate first-admin setup path; validate names and usernames.
     def add_user(self, name, username, password, role):
         """Creates a user with a hashed password. Returns the new User."""
         if role not in ROLES:
@@ -184,6 +195,7 @@ class ScheduleManager:
 
     # ---------- Clients ----------
 
+    # TODO [FR-03..08]: Require manage_clients permission and validate all client fields.
     def add_client(self, name, phone, allergies, preferences, household_size=1):
         client = Client(self.next_client_id, name, phone, allergies, preferences, household_size)
         self.clients.append(client)
@@ -191,6 +203,7 @@ class ScheduleManager:
         self._save_data()
         return client
 
+    # TODO [NFR-02]: Restrict which client fields each caller may view for their task.
     def find_client(self, client_id):
         for client in self.clients:
             if client.id == client_id:
@@ -199,6 +212,7 @@ class ScheduleManager:
 
     # ---------- Storeroom ----------
 
+    # TODO [FR-03, FR-09]: Require manage_inventory; distinguish donations from stock records.
     def add_item(self, name, allergens, may_contain, preferences, quantity=0):
         item = FoodbankItem(self.next_item_id, name, allergens, may_contain, preferences, quantity)
         self.storeroom.append(item)
@@ -212,6 +226,80 @@ class ScheduleManager:
                 return item
         return None
 
+    # TODO [FR-13]: Also exclude expired, damaged and contaminated batches.
+    # TODO: Enforce these checks again when adding stock to a hamper, not just when listing.
     def safe_items_for(self, client):
         """In-stock items that are safe for this client."""
         return [item for item in self.storeroom if item.quantity > 0 and client.can_have(item)]
+
+    def require_permission(self, permission):
+        # TODO [FIRST, FR-03]: Check current_user and PERMISSIONS; otherwise raise PermissionError.
+        # TODO: Call this at the start of every protected service operation.
+        raise NotImplementedError
+
+    def assign_role(self, user_id, current_role, new_role):
+        # TODO [FR-02]: Require manage_users; validate the new role and persist the move.
+        # TODO: Handle IDs that currently overlap across the three role collections.
+        raise NotImplementedError
+
+    def update_client(self, client_id, **changes):
+        # TODO [FR-05]: Require manage_clients, validate allowed changes and save.
+        raise NotImplementedError
+
+    def record_donation(self, donation_data):
+        # TODO [FR-09..10]: Validate required donation details and add stock atomically.
+        # TODO: Preserve donation history for reporting rather than only adding an item.
+        raise NotImplementedError
+
+    def search_inventory(self, filters):
+        # TODO [FR-11..12]: Search/filter items and flag unsafe/near-expiry batches.
+        # TODO: Define near-expiry thresholds and test the two-second search target.
+        raise NotImplementedError
+
+    def adjust_stock(self, item_id, quantity_change, reason):
+        # TODO [FR-10, NFR-12]: Validate permission/reason and reject negative final stock.
+        # TODO: Track received, reserved/packed, distributed, damaged and discarded stock.
+        # TODO: Make competing updates safe and avoid deducting stock twice at collection.
+        raise NotImplementedError
+
+    def create_hamper(self, client_id, packer_id):
+        # TODO [FR-14..15]: Require create_hamper; save a draft linked to client and packer.
+        # TODO: Display client food requirements and Client.severe_allergies().
+        raise NotImplementedError
+
+    def add_hamper_item(self, hamper_id, item_id, quantity):
+        # TODO [FR-13, FR-16]: Check packer permission, batch safety and available stock.
+        # TODO: Reuse Client.can_have() for allergies/diets, including severe may-contain.
+        # TODO: Reserve quantity atomically; test two packers requesting the last item.
+        raise NotImplementedError
+
+    def acknowledge_allergy_warning(self, hamper_id):
+        # TODO [FR-17]: Record explicit acknowledgement by this hamper's assigned packer.
+        raise NotImplementedError
+
+    def substitute_item(self, hamper_id, old_item_id, new_item_id, quantity):
+        # TODO [FR-18]: Validate replacement safety/diets and update reservations atomically.
+        # TODO [FR-19]: Save a respectful substitution notice without medical details.
+        # TODO: External SMS/email is optional; generating the notice is required.
+        raise NotImplementedError
+
+    def complete_hamper(self, hamper_id):
+        # TODO [FR-17]: Require acknowledgement when severe allergies exist.
+        # TODO: Recheck safety and stock; persist completion without duplicate deductions.
+        # TODO [TEST]: Verify failed completion rolls back and repeated completion is safe.
+        raise NotImplementedError
+
+    def manage_task(self, action, task_data):
+        # TODO [FR-20..25]: Add task creation/assignment/reassignment for authorised staff.
+        # TODO: Allow volunteers to view/update only their assigned tasks and report stock issues.
+        raise NotImplementedError
+
+    def manage_pickup(self, action, pickup_data):
+        # TODO [FR-26..27]: Require manage_pickups; schedule pickups and record collection.
+        # TODO [NFR-15]: Keep medical/private client details off public pickup views.
+        raise NotImplementedError
+
+    def generate_report(self, report_type):
+        # TODO [FR-28..32]: Require run_reports; report stock, expiry, shortages,
+        # donations and hamper distribution from saved data; define shortage thresholds.
+        raise NotImplementedError

@@ -7,8 +7,10 @@
 import bcrypt
 
 
-# This is an example of how we could do it and just have the options render based on what the permissions are 
+# This is an example of how we could do it and just have the options render based on what the permissions are
 # available to the role. This also means we can have just one struct for volunteers, staff and admin.
+# TODO [FR-03]: Enforce this matrix inside ScheduleManager; it currently only defines access.
+# TODO: Agree whether admins can pack hampers and whether staff can run reports.
 PERMISSIONS = {
     "volunteer": {"view_own_tasks", "update_task", "report_stock", "pack_hamper"},
     "staff": {"view_own_tasks", "update_task", "report_stock", "pack_hamper",
@@ -18,6 +20,7 @@ PERMISSIONS = {
 }
 
 
+# TODO: Validate password type/length and handle bcrypt errors with a clear message.
 def hash_password(password):
     """Returns a bcrypt hash of the password as a string (safe to store in JSON)."""
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")

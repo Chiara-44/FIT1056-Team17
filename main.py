@@ -18,6 +18,7 @@ def login_prompt(manager):
             continue
 
         username = input("Username: ").strip()
+        # TODO: Hide password entry; use getpass for CLI or a masked Tkinter field.
         password = input("Password: ")
 
         user = manager.login(username, password, role)
@@ -28,6 +29,7 @@ def login_prompt(manager):
 
 
 def main():
+    # TODO: Present storage/validation failures clearly instead of crashing.
     manager = ScheduleManager()  # loads data automatically
 
     user = login_prompt(manager)
@@ -36,6 +38,9 @@ def main():
         return
 
     print(f"Current User: {manager.current_user.role}")
+    # TODO [NEXT]: Add a menu loop for clients, inventory, hampers, tasks and pickups.
+    # TODO: Offer only permitted actions, and also enforce permissions in services.
+    # TODO: Add logout; build the planned Tkinter UI or document the CLI scope change.
     # TODO: show the menu for manager.current_user.role here
 
 

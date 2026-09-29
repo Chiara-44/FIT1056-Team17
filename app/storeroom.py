@@ -24,6 +24,8 @@ class FoodbankItem:
     """Holds an item stored in the foodbank storeroom."""
 
     def __init__(self, id, name, allergens, may_contain, preferences, quantity=0):
+        # TODO [FR-12..13]: Add expiry date, condition and storage requirements per batch.
+        # TODO: Validate non-negative quantity and normalise supported dietary tags.
         self.id = id
         self.name = name
         self.allergens = clean_allergens(allergens)      # definitely in the item
@@ -48,12 +50,15 @@ class FoodbankItem:
                 reasons.append(f"may contain {allergen} (severe allergy)")
         return reasons
 
+    # TODO: Keep this allergy/diet check; add expiry/condition/stock validation when packing.
+    # TODO [TEST]: Add dietary mismatch, multiple requirements and empty-preference cases.
     def is_safe_for(self, client_allergies, client_preferences):
         """True if there are no allergy conflicts and the item meets all the client's preferences."""
         no_conflicts = not self.allergy_conflicts(client_allergies)
         meets_prefs = set(client_preferences).issubset(self.preferences)
         return no_conflicts and meets_prefs
 
+    # TODO: Persist new batch safety fields and load them in ScheduleManager._build_items.
     def to_dict(self):
         return {
             "id": self.id,

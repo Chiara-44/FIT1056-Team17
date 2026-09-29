@@ -13,6 +13,9 @@ class Client:
     """Holds a foodbank client and their dietary needs."""
 
     def __init__(self, id, name, phone, allergies, preferences, household_size=1):
+        # TODO [FR-06..08]: Add household composition, accessibility needs, food
+        # preferences and preferred communication method; distinguish these from diets.
+        # TODO: Validate name/phone, positive household size and supported dietary tags.
         self.id = id
         self.name = name
         self.phone = phone
@@ -45,6 +48,7 @@ class Client:
         """True if the foodbank item is safe for this client."""
         return item.is_safe_for(self.allergies, self.preferences)
 
+    # TODO: Persist new client fields here and load them in ScheduleManager._build_clients.
     def to_dict(self):
         return {
             "id": self.id,
