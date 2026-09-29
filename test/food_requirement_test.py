@@ -1,6 +1,12 @@
+# filename: food_requirement_test.py
+# group: Team 17
+# names: Chiara
+# created: 29/09/26
+# last modified: 29/09/26
+
 import pytest
-from app.client import Client
-from app.foodbank_item import FoodbankItem
+from app.clients import Client
+from app.storeroom import FoodbankItem
 
 
 def make_item(allergens=(), may_contain=(), preferences=("vegan", "vegetarian")):
@@ -65,3 +71,4 @@ def test_old_list_format_treated_as_severe():
 def test_severe_allergies_listed_for_packer_warning():
     client = make_client({"peanuts": "severe", "dairy": "mild", "sesame": "severe"})
     assert client.severe_allergies() == ["peanuts", "sesame"]
+

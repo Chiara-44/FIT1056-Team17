@@ -1,4 +1,8 @@
-# main.py
+# filename: main.py
+# group: Team 17
+# names: Chiara
+# created: 18/09/26
+# last modified: 29/09/26
 
 from app.schedule import ScheduleManager, ROLES
 

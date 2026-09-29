@@ -1,3 +1,10 @@
+# filename: storeroom.py
+# group: Team 17
+# names: Chiara
+# created: 29/09/26
+# last modified: 29/09/26
+
+
 ALLERGENS = {"peanuts", "tree nuts", "dairy", "eggs", "gluten", "soy", "fish", "shellfish", "sesame"}
 PREFERENCES = {"vegan", "vegetarian", "halal", "kosher"}
 

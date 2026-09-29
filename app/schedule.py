@@ -1,8 +1,15 @@
+# filename: schedule.py
+# group: Team 17
+# names: Chiara
+# created: 18/09/26
+# last modified: 29/09/26
+
+
 import json
 import os
-from app.user import User
-from app.client import Client
-from app.foodbank_item import FoodbankItem
+from app.users import User, hash_password
+from app.clients import Client
+from app.storeroom import FoodbankItem
 
 ROLES = ("volunteer", "staff", "admin")
 
@@ -25,6 +32,7 @@ class ScheduleManager:
         self.next_client_id = 1
         self.next_item_id = 1
         self.current_user = None
+        self._needs_resave = False
 
         self._load_data()
 
@@ -33,11 +41,16 @@ class ScheduleManager:
     def _build_users(self, records, role):
         users = []
         for r in records:
+            password_hash = r.get("password_hash", "")
+            # Old data had plain-text passwords: hash them and flag the file for re-saving
+            if not password_hash and r.get("password"):
+                password_hash = hash_password(r["password"])
+                self._needs_resave = True
             user = User(
                 r.get("id"),
                 r.get("name", ""),
                 r.get("username", ""),
-                r.get("password", ""),
+                password_hash,
                 r.get("role", role),
             )
             users.append(user)
@@ -98,6 +111,11 @@ class ScheduleManager:
         self.next_client_id = data.get("next_client_id", 1)
         self.next_item_id = data.get("next_item_id", 1)
 
+        # Replace any plain-text passwords in the file with hashes straight away
+        if self._needs_resave:
+            self._save_data()
+            self._needs_resave = False
+
     def _save_data(self):
         """Converts object lists back to dictionaries and saves to JSON."""
         data_to_save = {
@@ -133,13 +151,36 @@ class ScheduleManager:
         if users is None:
             return None
         for user in users:
-            if user.username == username and user.password == password:
+            if user.username == username and user.check_password(password):
                 self.current_user = user
                 return user
         return None
 
     def logout(self):
         self.current_user = None
+
+    def add_user(self, name, username, password, role):
+        """Creates a user with a hashed password. Returns the new User."""
+        if role not in ROLES:
+            raise ValueError(f"Role must be one of {ROLES}")
+        for existing in self._users_for_role(role):
+            if existing.username == username:
+                raise ValueError(f"Username '{username}' is already taken")
+
+        if role == "volunteer":
+            new_id = self.next_volunteer_id
+            self.next_volunteer_id += 1
+        elif role == "staff":
+            new_id = self.next_staff_id
+            self.next_staff_id += 1
+        else:
+            new_id = self.next_admin_id
+            self.next_admin_id += 1
+
+        user = User(new_id, name, username, hash_password(password), role)
+        self._users_for_role(role).append(user)
+        self._save_data()
+        return user
 
     # ---------- Clients ----------
 

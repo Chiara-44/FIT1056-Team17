@@ -1,3 +1,9 @@
+# filename: clients.py
+# group: Team 17
+# names: Chiara
+# created: 29/09/26
+# last modified: 29/09/26
+
 from app.storeroom import ALLERGENS
 
 SEVERITIES = ("mild", "moderate", "severe")
