@@ -11,6 +11,8 @@ from app.users import User, hash_password
 from app.clients import Client
 from app.storeroom import FoodbankItem
 
+
+# list of valid roles
 ROLES = ("volunteer", "staff", "admin")
 
 

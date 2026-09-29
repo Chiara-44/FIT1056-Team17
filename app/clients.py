@@ -6,6 +6,8 @@
 
 from app.storeroom import ALLERGENS
 
+
+# List of severities
 SEVERITIES = ("mild", "moderate", "severe")
 
 
@@ -22,10 +24,6 @@ class Client:
 
     def _clean_allergies(self, allergies):
         """Checks allergen names and severities. Raises ValueError on anything invalid."""
-        # Old data stored allergies as a plain list; treat those as severe to be safe
-        if isinstance(allergies, list):
-            allergies = {a: "severe" for a in allergies}
-
         cleaned = {}
         for allergen, severity in allergies.items():
             allergen = allergen.strip().lower()

@@ -7,7 +7,7 @@
 
 import json
 
-from app.user import User, hash_password
+from app.users import User, hash_password
 
 from app.schedule import ScheduleManager
 
