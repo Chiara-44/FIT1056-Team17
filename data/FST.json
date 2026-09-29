@@ -8,7 +8,17 @@
     "admins": [
         {"id": 1, "name": "Admin", "username": "admin", "password": "admin123", "role": "admin"}
     ],
+    "clients": [
+        {"id": 1, "name": "Alex Nguyen", "phone": "0400 000 000", "allergies": ["peanuts"], "preferences": ["vegetarian"], "household_size": 3}
+    ],
+    "storeroom": [
+        {"id": 1, "name": "Peanut butter", "allergens": ["peanuts"], "preferences": ["vegan", "vegetarian"], "quantity": 10},
+        {"id": 2, "name": "Canned chickpeas", "allergens": [], "preferences": ["vegan", "vegetarian", "halal", "kosher"], "quantity": 24},
+        {"id": 3, "name": "Canned tuna", "allergens": ["fish"], "preferences": ["halal"], "quantity": 15}
+    ],
     "next_volunteer_id": 2,
     "next_staff_id": 2,
-    "next_admin_id": 2
+    "next_admin_id": 2,
+    "next_client_id": 2,
+    "next_item_id": 4
 }

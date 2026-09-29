@@ -1,6 +1,8 @@
 import json
 import os
-from app.users import User, volunteerUser, staffUser, adminUser
+from app.user import User
+from app.client import Client
+from app.foodbank_item import FoodbankItem
 
 ROLES = ("volunteer", "staff", "admin")
 
@@ -15,14 +17,18 @@ class ScheduleManager:
         self.volunteers = []
         self.staff = []
         self.admins = []
+        self.clients = []
+        self.storeroom = []
         self.next_volunteer_id = 1
         self.next_staff_id = 1
         self.next_admin_id = 1
+        self.next_client_id = 1
+        self.next_item_id = 1
         self.current_user = None
 
         self._load_data()
 
-    # ---------- Data ----------
+    # ---------- Loading helpers ----------
 
     def _build_users(self, records, role):
         users = []
@@ -36,6 +42,35 @@ class ScheduleManager:
             )
             users.append(user)
         return users
+
+    def _build_clients(self, records):
+        clients = []
+        for r in records:
+            client = Client(
+                r.get("id"),
+                r.get("name", ""),
+                r.get("phone", ""),
+                r.get("allergies", []),
+                r.get("preferences", []),
+                r.get("household_size", 1),
+            )
+            clients.append(client)
+        return clients
+
+    def _build_items(self, records):
+        items = []
+        for r in records:
+            item = FoodbankItem(
+                r.get("id"),
+                r.get("name", ""),
+                r.get("allergens", []),
+                r.get("preferences", []),
+                r.get("quantity", 0),
+            )
+            items.append(item)
+        return items
+
+    # ---------- Load / save ----------
 
     def _load_data(self):
         """Loads data from the JSON file and populates the object lists."""
@@ -53,11 +88,14 @@ class ScheduleManager:
         self.volunteers = self._build_users(data.get("volunteers", []), "volunteer")
         self.staff = self._build_users(data.get("staff", []), "staff")
         self.admins = self._build_users(data.get("admins", []), "admin")
-        self.attendance_log = data.get("attendance", [])
+        self.clients = self._build_clients(data.get("clients", []))
+        self.storeroom = self._build_items(data.get("storeroom", []))
 
         self.next_volunteer_id = data.get("next_volunteer_id", 1)
         self.next_staff_id = data.get("next_staff_id", 1)
         self.next_admin_id = data.get("next_admin_id", 1)
+        self.next_client_id = data.get("next_client_id", 1)
+        self.next_item_id = data.get("next_item_id", 1)
 
     def _save_data(self):
         """Converts object lists back to dictionaries and saves to JSON."""
@@ -65,10 +103,13 @@ class ScheduleManager:
             "volunteers": [u.to_dict() for u in self.volunteers],
             "staff": [u.to_dict() for u in self.staff],
             "admins": [u.to_dict() for u in self.admins],
-
+            "clients": [c.to_dict() for c in self.clients],
+            "storeroom": [i.to_dict() for i in self.storeroom],
             "next_volunteer_id": self.next_volunteer_id,
             "next_staff_id": self.next_staff_id,
             "next_admin_id": self.next_admin_id,
+            "next_client_id": self.next_client_id,
+            "next_item_id": self.next_item_id,
         }
         folder = os.path.dirname(self.data_path)
         if folder:
@@ -99,45 +140,36 @@ class ScheduleManager:
     def logout(self):
         self.current_user = None
 
+    # ---------- Clients ----------
 
-    #TODO ---------- CRUD features for all users ---------- 
-    # These are not edited yet !
+    def add_client(self, name, phone, allergies, preferences, household_size=1):
+        client = Client(self.next_client_id, name, phone, allergies, preferences, household_size)
+        self.clients.append(client)
+        self.next_client_id += 1
+        self._save_data()
+        return client
 
-    def add_volunteer (self, name, speciality):
-            """Adds a volunteer dictionary to the data store."""
-            #Create a new volunteerUser object with 'id', 'name', and 'speciality'
-            volunteer = volunteerUser(self.next_volunteer_id, name, speciality)
-            #Append the new object to the volunteers list.
-            self.volunteers.append(volunteer)
-            #Increment the 'next_volunteer_id'
-            self.next_volunteer_id += 1
-            self._save_data()
-            print(f"Core: volunteer '{name}' added.")
-    
-    def update_volunteer(self, id, **fields):
-        """Finds a volunteer by ID and updates their data with provided fields."""
-        # Loop through the volunteers list.
-        for volunteer in self.volunteers:
-            # If a volunteer's 'id' matches id:
-            if volunteer.volunteer_id == id:
-                # Update fields
-                for key, value in fields.items():
-                    setattr(volunteer, key, value)
-                print(f"volunteer {id} updated.")
-                self._save_data()
-                return
-        print(f"Error: volunteer with ID {id} not found.")
-    
-    def remove_volunteer(self, id):
-        """Removes a volunteer from the data store."""
-        # Find the volunteer with the matching ID.
-        for volunteer in self.volunteers:
-        # If found, use the .remove() method on the list to delete it.
-                if volunteer.volunteer_id == id:
-                self.volunteers.remove(volunteer)
-                print(f"volunteer {id} deleted.")
-                self._save_data()
-                return
-        print(f"Error: volunteer with ID {id} not found.")
-    
-    
+    def find_client(self, client_id):
+        for client in self.clients:
+            if client.id == client_id:
+                return client
+        return None
+
+    # ---------- Storeroom ----------
+
+    def add_item(self, name, allergens, preferences, quantity=0):
+        item = FoodbankItem(self.next_item_id, name, allergens, preferences, quantity)
+        self.storeroom.append(item)
+        self.next_item_id += 1
+        self._save_data()
+        return item
+
+    def find_item(self, item_id):
+        for item in self.storeroom:
+            if item.id == item_id:
+                return item
+        return None
+
+    def safe_items_for(self, client):
+        """In-stock items that are safe for this client."""
+        return [item for item in self.storeroom if item.quantity > 0 and client.can_have(item)]
