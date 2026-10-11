@@ -2,8 +2,9 @@
 # group: Team 17
 # names: Chiara
 # created: 29/09/26
-# last modified: 29/09/26
+# last modified: 11/10/26
 
+from datetime import date
 
 ALLERGENS = {"peanuts", "tree nuts", "dairy", "eggs", "gluten", "soy", "fish", "shellfish", "sesame"}
 PREFERENCES = {"vegan", "vegetarian", "halal", "kosher"}
@@ -20,18 +21,53 @@ def clean_allergens(names):
     return cleaned
 
 
+def parse_expiry(value):
+    """Turns 'YYYY-MM-DD' (or a date, or None/'') into a date or None. Raises ValueError if invalid."""
+    if value is None or value == "":
+        return None
+    if isinstance(value, date):
+        return value
+    try:
+        return date.fromisoformat(str(value).strip())
+    except ValueError:
+        raise ValueError(f"Expiry date must look like YYYY-MM-DD, got '{value}'")
+
+
+def clean_quantity(quantity):
+    """Checks a stock quantity is a whole number of zero or more. Raises ValueError otherwise."""
+    if isinstance(quantity, bool):
+        raise ValueError("Quantity must be a whole number")
+    try:
+        quantity = int(quantity)
+    except (TypeError, ValueError):
+        raise ValueError(f"Quantity must be a whole number, got '{quantity}'")
+    if quantity < 0:
+        raise ValueError("Quantity cannot be negative")
+    return quantity
+
+
 class FoodbankItem:
     """Holds an item stored in the foodbank storeroom."""
 
-    def __init__(self, id, name, allergens, may_contain, preferences, quantity=0):
-        # TODO [FR-12..13]: Add expiry date, condition and storage requirements per batch.
-        # TODO: Validate non-negative quantity and normalise supported dietary tags.
+    def __init__(self, id, name, allergens, may_contain, preferences, quantity=0, expiry=None):
+        # TODO [FR-12..13]: Add condition and storage requirements per batch.
+        if not str(name).strip():
+            raise ValueError("Item name cannot be empty")
         self.id = id
-        self.name = name
+        self.name = str(name).strip()
         self.allergens = clean_allergens(allergens)      # definitely in the item
         self.may_contain = clean_allergens(may_contain)  # "may contain traces of"
-        self.preferences = set(preferences)              # diets the item is suitable for
-        self.quantity = quantity
+        self.preferences = {p.strip().lower() for p in preferences}  # diets the item suits
+        unknown = self.preferences - PREFERENCES
+        if unknown:
+            raise ValueError(f"Unknown dietary tag(s): {', '.join(sorted(unknown))}")
+        self.quantity = clean_quantity(quantity)
+        self.expiry = parse_expiry(expiry)
+
+    def is_expired(self, today=None):
+        """True if the item has an expiry date that is before today (FR-13)."""
+        today = today or date.today()
+        return self.expiry is not None and self.expiry < today
 
     def allergy_conflicts(self, client_allergies):
         """
@@ -50,15 +86,12 @@ class FoodbankItem:
                 reasons.append(f"may contain {allergen} (severe allergy)")
         return reasons
 
-    # TODO: Keep this allergy/diet check; add expiry/condition/stock validation when packing.
-    # TODO [TEST]: Add dietary mismatch, multiple requirements and empty-preference cases.
     def is_safe_for(self, client_allergies, client_preferences):
         """True if there are no allergy conflicts and the item meets all the client's preferences."""
         no_conflicts = not self.allergy_conflicts(client_allergies)
         meets_prefs = set(client_preferences).issubset(self.preferences)
         return no_conflicts and meets_prefs
 
-    # TODO: Persist new batch safety fields and load them in ScheduleManager._build_items.
     def to_dict(self):
         return {
             "id": self.id,
@@ -67,4 +100,5 @@ class FoodbankItem:
             "may_contain": sorted(self.may_contain),
             "preferences": sorted(self.preferences),
             "quantity": self.quantity,
+            "expiry": self.expiry.isoformat() if self.expiry else None,
         }
