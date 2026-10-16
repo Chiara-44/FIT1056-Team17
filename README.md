@@ -121,6 +121,17 @@ client_allergies is a dict like {"peanuts": "severe", "dairy": "mild"}.
 
 ***def to_dict(self):*** Converts the struct into dicts to be stored in the FST.json file.
 
+### users.py
+***PERMISSIONS*** A dict that store all permission that each role has access to.
+
+***User [CLASS]***
+
+***def set_password(self, password):***
+
+***def check_password(self, password):***
+
+***def to_dict(self):***
+
 ## Project structure
 
 ```
@@ -144,17 +155,6 @@ client_allergies is a dict like {"peanuts": "severe", "dairy": "mild"}.
 ├── README.md
 └── requirements.txt
 ```
-
-***PERMISSIONS*** A dict that store all permission that each role has access to.
-
-***User [CLASS]***
-
-***def set_password(self, password):***
-
-***def check_password(self, password):***
-
-***def to_dict(self):***
-
 
 ## Known issues and not yet implemented
 - The interface is a command-line app rather than the Tkinter GUI planned in Deliverable 1,
