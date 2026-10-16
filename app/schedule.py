@@ -116,6 +116,7 @@ class ScheduleManager:
                 r.get("status", "draft"),
                 r.get("allergy_acknowledged", False),
                 r.get("substitution_notes", []),
+                r.get("substitutions", {}),
             )
             for r in records
         ]
@@ -487,6 +488,7 @@ class ScheduleManager:
         except (ValueError, PermissionError):
             hamper.add(old_item.id, quantity)  # put the original back (roll back)
             raise
+        hamper.line_for(new_item.id).substituted_for = old_item.id
 
         note = (f"We've included {new_item.name} instead of {old_item.name} today, as "
                 f"{old_item.name} wasn't available. If this doesn't suit you, please let "

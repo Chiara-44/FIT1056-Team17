@@ -262,9 +262,13 @@ def show_hamper(manager, hamper):
     print(f"\nHamper #{hamper.id} contains:")
     if not hamper.items:
         print("  (empty)")
-    for item_id, quantity in hamper.items.items():
-        item = manager.find_item(item_id)
-        print(f"  {quantity} x {item.name if item else 'unknown item'} (item #{item_id})")
+    for line in hamper.lines:
+        item = manager.find_item(line.item_id)
+        text = f"  {line.quantity} x {item.name if item else 'unknown item'} (item #{line.item_id})"
+        if line.substituted_for is not None:
+            old = manager.find_item(line.substituted_for)
+            text += f", replacing {old.name if old else 'item #' + str(line.substituted_for)}"
+        print(text)
     for note in hamper.substitution_notes:
         print(f"  Note for client: {note}")
 

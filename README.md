@@ -138,7 +138,7 @@ client_allergies is a dict like {"peanuts": "severe", "dairy": "mild"}.
 ```
 ├── app
 │   ├── clients.py     Client class: dietary needs, allergies, packing summary
-│   ├── hampers.py     Hamper class: items, status, allergy acknowledgement, notes
+│   ├── hampers.py     Hamper and HamperItem classes: item lines, substitutions, status, notes
 │   ├── pickups.py     Pickup class: booked time, status, who recorded the collection
 │   ├── schedule.py    ScheduleManager: business rules, permissions, loading/saving
 │   ├── storeroom.py   FoodbankItem class: allergens, dietary tags, expiry, quantity
@@ -148,6 +148,7 @@ client_allergies is a dict like {"peanuts": "severe", "dairy": "mild"}.
 ├── test
 │   ├── food_requirement_test.py   Allergy and diet safety rules
 │   ├── functional_test.py         End-to-end, boundary and MC/DC tests through the menus
+│   ├── hamper_item_test.py        HamperItem lines, quantities and recorded substitutions
 │   ├── hamper_test.py             Permissions, hampers, donations, privacy, boundaries
 │   ├── client_test.py             Household, contact method, editing, private notes, privacy
 │   ├── password_test.py           Password hashing and login
