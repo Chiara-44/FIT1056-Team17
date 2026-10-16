@@ -2,16 +2,17 @@
 # group: Team 17
 # names: Chiara
 # created: 18/09/26
-# last modified: 11/10/26
+# last modified: 16/10/26
 #
 # Command-line interface for FoodShare Tracker.
 # Every screen only offers what the logged-in role is allowed to do, and the
 # ScheduleManager checks permissions again in case a menu is ever wrong.
 
+from datetime import date
 from getpass import getpass
 
 from app.schedule import ScheduleManager, ROLES, DEFAULT_DATA_PATH
-from app.storeroom import ALLERGENS, PREFERENCES
+from app.storeroom import ALLERGENS, PREFERENCES, parse_expiry
 
 
 # ---------- Small input helpers ----------
@@ -222,6 +223,78 @@ def add_user_screen(manager):
     print(f"Created {user.role} account '{user.username}'.")
 
 
+def show_pickups(manager, day):
+    pickups = manager.pickups_on(day)
+    label = "today" if day == date.today() else day.strftime("%d/%m/%Y")
+    print(f"\n--- Pickups for {label} ---")
+    if not pickups:
+        print("No pickups booked.")
+    for pickup in pickups:
+        print(manager.pickup_label(pickup))
+
+
+def hampers_ready_for_pickup(manager):
+    """Completed hampers that don't have a pickup booked yet."""
+    booked = {p.hamper_id for p in manager.pickups if p.status != "cancelled"}
+    return [h for h in manager.hampers if h.status == "completed" and h.id not in booked]
+
+
+def pickups_screen(manager):
+    """F-06: view the day's pickups, record collections and (for staff) book pickups."""
+    can_manage = manager.can("manage_pickups")
+    day = date.today()
+    while True:
+        show_pickups(manager, day)
+        options = "\n[c] Record a collection  [d] Show another day"
+        if can_manage:
+            options += "\n[s] Book a pickup  [r] Change a pickup time  [x] Cancel a pickup"
+        print(options + "\n[b] Back to main menu")
+        choice = ask("Choose: ").lower()
+        try:
+            if choice == "b":
+                return
+            elif choice == "c":
+                pickup_id = ask_int("Pickup number: ")
+                pickup = manager.record_collection(pickup_id)
+                print(f"Pickup #{pickup.id} marked as collected. Thanks!")
+            elif choice == "d":
+                text = ask("Date (DD/MM/YYYY or YYYY-MM-DD, blank for today): ")
+                if not text:
+                    day = date.today()
+                elif "/" in text:
+                    d, m, y = text.split("/")
+                    day = date(int(y), int(m), int(d))
+                else:
+                    day = parse_expiry(text)
+            elif choice == "s" and can_manage:
+                ready = hampers_ready_for_pickup(manager)
+                if not ready:
+                    print("There are no completed hampers waiting for a pickup time.")
+                    continue
+                print("\nCompleted hampers without a pickup:")
+                for h in ready:
+                    client = manager.find_client(h.client_id)
+                    first = client.name.split()[0] if client else "Unknown"
+                    print(f"  Hamper #{h.id} for client #{h.client_id} ({first})")
+                hamper_id = ask_int("Hamper number: ")
+                when = ask("Pickup time (e.g. 25/10/2026 14:30): ")
+                pickup = manager.schedule_pickup(hamper_id, when)
+                print(f"Booked pickup #{pickup.id} for {pickup.scheduled_at.strftime('%d/%m/%Y %H:%M')}.")
+            elif choice == "r" and can_manage:
+                pickup_id = ask_int("Pickup number: ")
+                when = ask("New time (e.g. 25/10/2026 14:30): ")
+                pickup = manager.reschedule_pickup(pickup_id, when)
+                print(f"Pickup #{pickup.id} moved to {pickup.scheduled_at.strftime('%d/%m/%Y %H:%M')}.")
+            elif choice == "x" and can_manage:
+                pickup_id = ask_int("Pickup number: ")
+                manager.cancel_pickup(pickup_id)
+                print(f"Pickup #{pickup_id} cancelled.")
+            else:
+                print("Please choose one of the letters shown.")
+        except (ValueError, PermissionError) as e:
+            print(f"Can't do that: {e}")
+
+
 # Each menu option: (key, label, permission needed (None = any logged-in user), function)
 MENU = [
     ("1", "View stock", None, show_stock),
@@ -230,6 +303,7 @@ MENU = [
     ("4", "Register a client", "manage_clients", add_client_screen),
     ("5", "Prepare a hamper", ("pack_hamper", "create_hamper"), prepare_hamper_screen),
     ("6", "Add a user", "manage_users", add_user_screen),
+    ("7", "Pickups", ("record_pickup", "manage_pickups"), pickups_screen),
 ]
 
 

@@ -2,7 +2,7 @@
 # group: Team 17
 # names: Chiara
 # created: 18/09/26
-# last modified: 11/10/26
+# last modified: 16/10/26
 
 import hashlib
 import hmac
@@ -18,11 +18,11 @@ ITERATIONS = 200_000
 # Enforced by ScheduleManager.require_permission() at the start of every protected action (FR-03).
 # TODO: Agree whether admins can pack hampers and whether staff can run reports.
 PERMISSIONS = {
-    "volunteer": {"view_own_tasks", "update_task", "report_stock", "pack_hamper"},
-    "staff": {"view_own_tasks", "update_task", "report_stock", "pack_hamper",
+    "volunteer": {"view_own_tasks", "update_task", "report_stock", "pack_hamper", "record_pickup"},
+    "staff": {"view_own_tasks", "update_task", "report_stock", "pack_hamper", "record_pickup",
               "manage_clients", "manage_inventory", "create_hamper", "manage_tasks", "manage_pickups"},
     "admin": {"manage_users", "run_reports", "manage_clients", "manage_inventory",
-              "create_hamper", "manage_tasks", "manage_pickups"},
+              "create_hamper", "manage_tasks", "manage_pickups", "record_pickup"},
 }
 
 

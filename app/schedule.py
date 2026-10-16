@@ -2,17 +2,18 @@
 # group: Team 17
 # names: Chiara
 # created: 18/09/26
-# last modified: 11/10/26
+# last modified: 16/10/26
 
 
 import json
 import os
-from datetime import date
+from datetime import date, datetime
 
 from app.users import User, hash_password, PERMISSIONS
 from app.clients import Client
 from app.storeroom import FoodbankItem, clean_quantity, clean_allergens, parse_expiry
 from app.hampers import Hamper, COMPLETED
+from app.pickups import Pickup, parse_pickup_time
 
 ROLES = ("volunteer", "staff", "admin")
 
@@ -34,6 +35,7 @@ class ScheduleManager:
         self.clients = []
         self.storeroom = []
         self.hampers = []
+        self.pickups = []
         self.donations = []
         self.next_volunteer_id = 1
         self.next_staff_id = 1
@@ -41,6 +43,7 @@ class ScheduleManager:
         self.next_client_id = 1
         self.next_item_id = 1
         self.next_hamper_id = 1
+        self.next_pickup_id = 1
         self.current_user = None
         self._needs_resave = False
 
@@ -108,6 +111,20 @@ class ScheduleManager:
             for r in records
         ]
 
+    def _build_pickups(self, records):
+        return [
+            Pickup(
+                r.get("id"),
+                r.get("hamper_id"),
+                r.get("client_id"),
+                r.get("scheduled_at"),
+                r.get("status", "scheduled"),
+                r.get("collected_at"),
+                r.get("collected_by", ""),
+            )
+            for r in records
+        ]
+
     # ---------- Load / save ----------
 
     # TODO: Validate record types, required fields and ID counters before accepting data.
@@ -135,6 +152,7 @@ class ScheduleManager:
             self.clients = self._build_clients(data.get("clients", []))
             self.storeroom = self._build_items(data.get("storeroom", []))
             self.hampers = self._build_hampers(data.get("hampers", []))
+            self.pickups = self._build_pickups(data.get("pickups", []))
         except ValueError as e:
             raise ValueError(f"Data file '{self.data_path}' has an invalid record: {e}")
         self.donations = list(data.get("donations", []))
@@ -145,6 +163,7 @@ class ScheduleManager:
         self.next_client_id = data.get("next_client_id", 1)
         self.next_item_id = data.get("next_item_id", 1)
         self.next_hamper_id = data.get("next_hamper_id", 1)
+        self.next_pickup_id = data.get("next_pickup_id", 1)
 
         # Replace any plain-text passwords in the file with hashes straight away
         if self._needs_resave:
@@ -164,6 +183,7 @@ class ScheduleManager:
             "clients": [c.to_dict() for c in self.clients],
             "storeroom": [i.to_dict() for i in self.storeroom],
             "hampers": [h.to_dict() for h in self.hampers],
+            "pickups": [p.to_dict() for p in self.pickups],
             "donations": self.donations,
             "next_volunteer_id": self.next_volunteer_id,
             "next_staff_id": self.next_staff_id,
@@ -171,6 +191,7 @@ class ScheduleManager:
             "next_client_id": self.next_client_id,
             "next_item_id": self.next_item_id,
             "next_hamper_id": self.next_hamper_id,
+            "next_pickup_id": self.next_pickup_id,
         }
         folder = os.path.dirname(self.data_path)
         if folder:
@@ -488,6 +509,100 @@ class ScheduleManager:
         self.hampers.remove(hamper)
         self._save_data()
 
+    # ---------- Pickups (F-06) ----------
+
+    def find_pickup(self, pickup_id):
+        for pickup in self.pickups:
+            if pickup.id == pickup_id:
+                return pickup
+        return None
+
+    def _get_pickup(self, pickup_id):
+        pickup = self.find_pickup(pickup_id)
+        if pickup is None:
+            raise ValueError(f"No pickup with number {pickup_id}")
+        return pickup
+
+    def _check_pickup_time(self, when, now=None):
+        """Parses a pickup time and makes sure it isn't in the past."""
+        when = parse_pickup_time(when)
+        now = (now or datetime.now()).replace(second=0, microsecond=0)
+        if when < now:
+            raise ValueError("Pickup time can't be in the past")
+        return when
+
+    def schedule_pickup(self, hamper_id, when, now=None):
+        """Books a time for the client to collect a completed hamper (FR-26).
+
+        Only completed hampers can be booked, so a client is never told to come in for
+        a hamper that hasn't been packed yet. Each hamper can only have one active pickup.
+        """
+        self.require_permission("manage_pickups")
+        hamper = self.find_hamper(hamper_id)
+        if hamper is None:
+            raise ValueError(f"No hamper with number {hamper_id}")
+        if hamper.status != COMPLETED:
+            raise ValueError("The hamper needs to be completed before a pickup can be booked")
+        for existing in self.pickups:
+            if existing.hamper_id == hamper.id and existing.status != "cancelled":
+                raise ValueError(f"Hamper #{hamper.id} already has pickup #{existing.id}")
+        when = self._check_pickup_time(when, now)
+        pickup = Pickup(self.next_pickup_id, hamper.id, hamper.client_id, when)
+        self.pickups.append(pickup)
+        self.next_pickup_id += 1
+        self._save_data()
+        return pickup
+
+    def reschedule_pickup(self, pickup_id, when, now=None):
+        """Moves a scheduled pickup to a new time."""
+        self.require_permission("manage_pickups")
+        pickup = self._get_pickup(pickup_id)
+        if not pickup.is_active():
+            raise ValueError(f"Only scheduled pickups can be moved (this one is {pickup.status})")
+        pickup.scheduled_at = self._check_pickup_time(when, now)
+        self._save_data()
+        return pickup
+
+    def cancel_pickup(self, pickup_id):
+        self.require_permission("manage_pickups")
+        pickup = self._get_pickup(pickup_id)
+        pickup.cancel()
+        self._save_data()
+        return pickup
+
+    def record_collection(self, pickup_id, when=None):
+        """Records that the client has collected their hamper (FR-27).
+
+        Volunteers at the pickup counter can do this as well as staff.
+        """
+        self.require_permission("record_pickup")
+        pickup = self._get_pickup(pickup_id)
+        pickup.mark_collected(self.current_user.username, when)
+        self._save_data()
+        return pickup
+
+    def pickups_on(self, day=None):
+        """Scheduled and collected pickups for one day (default today), earliest first."""
+        self.require_permission("record_pickup", "manage_pickups")
+        day = day or date.today()
+        found = [p for p in self.pickups
+                 if p.scheduled_at.date() == day and p.status != "cancelled"]
+        return sorted(found, key=lambda p: p.scheduled_at)
+
+    def pickup_label(self, pickup, now=None):
+        """One line for the pickup list, safe to show at a public counter (NFR-15).
+
+        Shows the pickup number, time, client number and first name only. No allergies,
+        dietary needs, phone numbers or other private details.
+        """
+        client = self.find_client(pickup.client_id)
+        first_name = client.name.split()[0] if client else "Unknown"
+        status = pickup.status
+        if pickup.is_overdue(now):
+            status = "not collected yet (time passed)"
+        return (f"Pickup #{pickup.id}  {pickup.scheduled_at.strftime('%H:%M')}  "
+                f"Client #{pickup.client_id} ({first_name})  Hamper #{pickup.hamper_id}  {status}")
+
     # ---------- Not yet implemented (planned for the final submission) ----------
 
     def assign_role(self, user_id, current_role, new_role):
@@ -509,10 +624,6 @@ class ScheduleManager:
 
     def manage_task(self, action, task_data):
         # TODO [FR-20..25]: Add task creation/assignment/reassignment for authorised staff.
-        raise NotImplementedError
-
-    def manage_pickup(self, action, pickup_data):
-        # TODO [FR-26..27]: Require manage_pickups; schedule pickups and record collection.
         raise NotImplementedError
 
     def generate_report(self, report_type):
