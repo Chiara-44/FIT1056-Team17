@@ -14,6 +14,8 @@ from app.clients import Client
 from app.storeroom import FoodbankItem, clean_quantity, clean_allergens, parse_expiry
 from app.hampers import Hamper, COMPLETED
 
+
+# list of valid roles
 ROLES = ("volunteer", "staff", "admin")
 
 # Default data file, found relative to the project rather than wherever the app is launched from
