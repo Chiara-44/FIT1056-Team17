@@ -44,6 +44,7 @@ python -m pytest
 | Hamper preparation (UC-01) | Shows the client's needs, requires the packer to confirm a severe allergy warning, lists only safe in-stock items, and blocks unsafe, unsuitable, expired or out-of-stock items. | F-04, FR-14 to FR-17 |
 | Substitution | Swaps an item for a safe replacement and saves a respectful note for the client with no medical details. An unsafe swap is rolled back. | FR-18, FR-19 |
 | Completing a hamper | Re-checks every item, then deducts stock and saves. If any check fails, nothing changes. Draft hampers can be cancelled without using stock. | FR-14 |
+| Pickups | Staff book a pickup time for a completed hamper (DD/MM/YYYY or YYYY-MM-DD), change or cancel it. Staff and volunteers see the day's pickups and record collections. The pickup list shows only the client number and first name. | F-06, FR-26, FR-27, NFR-15 |
 | Safe saving | Data is written to a temporary file then swapped in, so a crash during saving can't corrupt the data file. Bad data shows a clear message instead of crashing. | NFR-11 |
 
 ## App
@@ -126,6 +127,7 @@ client_allergies is a dict like {"peanuts": "severe", "dairy": "mild"}.
 ├── app
 │   ├── clients.py     Client class: dietary needs, allergies, packing summary
 │   ├── hampers.py     Hamper class: items, status, allergy acknowledgement, notes
+│   ├── pickups.py     Pickup class: booked time, status, who recorded the collection
 │   ├── schedule.py    ScheduleManager: business rules, permissions, loading/saving
 │   ├── storeroom.py   FoodbankItem class: allergens, dietary tags, expiry, quantity
 │   └── users.py       User class, password hashing (hashlib), role permission matrix
@@ -133,8 +135,10 @@ client_allergies is a dict like {"peanuts": "severe", "dairy": "mild"}.
 │   └── FST.json       Sample data (users, clients, stock, hampers, donations)
 ├── test
 │   ├── food_requirement_test.py   Allergy and diet safety rules
+│   ├── functional_test.py         End-to-end, boundary and MC/DC tests through the menus
 │   ├── hamper_test.py             Permissions, hampers, donations, privacy, boundaries
-│   └── password_test.py           Password hashing and login
+│   ├── password_test.py           Password hashing and login
+│   └── pickup_test.py             Booking, collection, privacy and boundary tests for pickups
 ├── conftest.py        Lets pytest find the app package
 ├── main.py            Command-line menus
 ├── README.md
@@ -155,8 +159,8 @@ client_allergies is a dict like {"peanuts": "severe", "dairy": "mild"}.
 ## Known issues and not yet implemented
 - The interface is a command-line app rather than the Tkinter GUI planned in Deliverable 1,
   and data is stored in JSON rather than SQLite.
-- Volunteer tasks (F-05), pickup scheduling (F-06) and reports (F-07) are not built yet. Their
-  methods in `schedule.py` raise `NotImplementedError`.
+- Volunteer tasks (F-05) and reports (F-07) are not built yet. Their methods in `schedule.py`
+  raise `NotImplementedError`.
 - Editing client details, changing user roles, searching stock and recording damaged stock
   are not built yet.
 - If the app is closed while a hamper is being packed, that draft hamper stays in the data
