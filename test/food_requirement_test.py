@@ -4,9 +4,12 @@
 # created: 29/09/26
 # last modified: 29/09/26
 
+import json
+
 import pytest
 from app.clients import Client
 from app.storeroom import FoodbankItem
+from app.schedule import ScheduleManager
 
 
 def make_item(allergens=(), may_contain=(), preferences=("vegan", "vegetarian")):
@@ -63,9 +66,18 @@ def test_allergen_names_are_case_insensitive():
     assert not client.can_have(make_item(allergens=["PEANUTS"]))
 
 
-def test_old_list_format_treated_as_severe():
-    client = Client(1, "Old", "0400", ["peanuts"], [])
-    assert client.allergies == {"peanuts": "severe"}
+def test_list_format_without_severity_rejected():
+    # Allergies must always have a severity, so a plain list gives a clear error
+    with pytest.raises(ValueError, match="severity"):
+        Client(1, "Old", "0400", ["peanuts"], [])
+
+
+def test_client_record_without_allergies_loads(tmp_path):
+    # A saved client with no "allergies" field should load as having no allergies
+    path = tmp_path / "data.json"
+    path.write_text(json.dumps({"clients": [{"id": 1, "name": "Sam", "phone": ""}]}))
+    manager = ScheduleManager(str(path))
+    assert manager.find_client(1).allergies == {}
 
 
 def test_severe_allergies_listed_for_packer_warning():

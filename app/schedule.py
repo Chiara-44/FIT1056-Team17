@@ -77,7 +77,7 @@ class ScheduleManager:
                 r.get("id"),
                 r.get("name", ""),
                 r.get("phone", ""),
-                r.get("allergies", []),
+                r.get("allergies", {}),
                 r.get("preferences", []),
                 r.get("household_size", 1),
             )

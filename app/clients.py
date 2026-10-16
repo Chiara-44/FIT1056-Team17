@@ -49,6 +49,9 @@ class Client:
 
     def _clean_allergies(self, allergies):
         """Checks allergen names and severities. Raises ValueError on anything invalid."""
+        if not isinstance(allergies, dict):
+            raise ValueError("Allergies must be recorded with a severity, "
+                             "e.g. {\"peanuts\": \"severe\"}")
         cleaned = {}
         for allergen, severity in allergies.items():
             allergen = allergen.strip().lower()
