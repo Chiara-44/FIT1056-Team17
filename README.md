@@ -38,7 +38,8 @@ python -m pytest
 |---|---|---|
 | Login and roles | Log in as volunteer, staff or admin. Passwords are stored as salted PBKDF2-SHA256 hashes (Python standard library) and hidden while typing. Log out returns to the login screen. | F-01, FR-01 |
 | Role-based access | Menus only show the actions a role may use, and every protected action is checked again in `ScheduleManager.require_permission()`. | FR-03, NFR-02 |
-| Client registration | Staff record name, optional phone, household size, dietary needs and allergies with severity. Inputs are validated. | F-02, FR-04 to FR-07 |
+| Client registration | Staff record name, household (adults, children, infants), dietary needs, allergies with severity, food/cultural preferences, preferred language, accessibility needs and how the client wants to be contacted. Options are picked from numbered lists. | F-02, FR-04, FR-06 to FR-08 |
+| Client details | Staff and admins can view a client's full profile, edit any detail (checked before saving, so a mistake changes nothing) and add private notes that volunteers never see. | FR-05, NFR-02 |
 | Privacy-aware client view | Volunteers see only client number, first name and food requirements, never contact details. | NFR-02, NFR-15 |
 | Donations and stock | Staff record donations with allergens, "may contain" traces, dietary tags and expiry dates. Matching batches are merged and each donation is logged. Expired donations are refused. | F-03, FR-09, FR-10 |
 | Hamper preparation (UC-01) | Shows the client's needs, requires the packer to confirm a severe allergy warning, lists only safe in-stock items, and blocks unsafe, unsuitable, expired or out-of-stock items. | F-04, FR-14 to FR-17 |
@@ -148,6 +149,7 @@ client_allergies is a dict like {"peanuts": "severe", "dairy": "mild"}.
 │   ├── food_requirement_test.py   Allergy and diet safety rules
 │   ├── functional_test.py         End-to-end, boundary and MC/DC tests through the menus
 │   ├── hamper_test.py             Permissions, hampers, donations, privacy, boundaries
+│   ├── client_test.py             Household, contact method, editing, private notes, privacy
 │   ├── password_test.py           Password hashing and login
 │   └── pickup_test.py             Booking, collection, privacy and boundary tests for pickups
 ├── conftest.py        Lets pytest find the app package
@@ -161,8 +163,7 @@ client_allergies is a dict like {"peanuts": "severe", "dairy": "mild"}.
   and data is stored in JSON rather than SQLite.
 - Volunteer tasks (F-05) and reports (F-07) are not built yet. Their methods in `schedule.py`
   raise `NotImplementedError`.
-- Editing client details, changing user roles, searching stock and recording damaged stock
-  are not built yet.
+- Changing user roles, searching stock and recording damaged stock are not built yet.
 - If the app is closed while a hamper is being packed, that draft hamper stays in the data
   file. It doesn't affect stock.
 - In some IDE consoles (for example IDLE), the password may still be visible while typing.

@@ -13,6 +13,7 @@ from getpass import getpass
 
 from app.schedule import ScheduleManager, ROLES, DEFAULT_DATA_PATH
 from app.storeroom import ALLERGENS, PREFERENCES, parse_expiry
+from app.clients import CONTACT_METHODS, ACCESSIBILITY_NEEDS, SEVERITIES
 
 
 # ---------- Small input helpers ----------
@@ -116,21 +117,145 @@ def list_clients(manager):
             print(client.packing_summary())
 
 
+def ask_choices(options, prompt, many=False):
+    """Shows numbered options and returns the chosen one (or list, if many=True).
+
+    Picking by number avoids typos like 'nutz'. Blank means none (when many=True).
+    """
+    options = list(options)
+    for i, option in enumerate(options, 1):
+        print(f"  {i}. {option}")
+    while True:
+        text = ask(prompt)
+        if many and text == "":
+            return []
+        try:
+            picks = [int(part) for part in text.replace(",", " ").split()]
+            if picks and all(1 <= n <= len(options) for n in picks):
+                chosen = [options[n - 1] for n in picks]
+                return chosen if many else chosen[0]
+        except ValueError:
+            pass
+        print(f"  Please type a number from 1 to {len(options)}" +
+              (", or several separated by spaces." if many else "."))
+
+
+def ask_household():
+    print("Who is in the household? (press Enter for 0)")
+    household = {}
+    for key, label in (("adults", "Adults (18 and over)"), ("children", "Children (3 to 17)"),
+                       ("infants", "Infants (under 3)")):
+        household[key] = ask_int(f"  {label}: ", allow_blank=True) or 0
+    return household
+
+
+def ask_allergies():
+    chosen = ask_choices(sorted(ALLERGENS), "Allergies (numbers separated by spaces, Enter for none): ",
+                         many=True)
+    allergies = {}
+    for allergen in chosen:
+        print(f"How serious is the {allergen} allergy?")
+        allergies[allergen] = ask_choices(SEVERITIES, "  Choose: ")
+    return allergies
+
+
+def ask_contact(phone, email):
+    """Returns (phone, email, contact_method), asking only for the details that are needed."""
+    print("How would they like us to contact them?")
+    method = ask_choices(CONTACT_METHODS, "Choose: ")
+    if method in ("sms", "phone call") and not phone:
+        phone = ask("Phone number: ")
+    if method == "email" and not email:
+        email = ask("Email address: ")
+    return phone, email, method
+
+
 def add_client_screen(manager):
     print("\n--- Register a client ---")
-    print("We only ask for what we need to prepare safe, suitable food.")
+    print("We only ask for what we need to prepare safe, suitable food and to get in touch.")
+    print("Anything marked optional can be skipped.")
     name = ask("Name (or the name they prefer to use): ")
-    phone = ask("Phone (optional, for pickup reminders): ")
-    household = ask_int("How many people in the household? ")
-    print(f"Dietary needs available: {', '.join(sorted(PREFERENCES))}")
-    prefs = ask_list("Dietary needs (comma separated, blank for none): ")
-    print(f"Allergens: {', '.join(sorted(ALLERGENS))}")
-    allergies = {}
-    for allergen in ask_list("Allergies (comma separated, blank for none): "):
-        severity = ask(f"  How serious is the {allergen} allergy? (mild/moderate/severe): ")
-        allergies[allergen] = severity
-    client = manager.add_client(name, phone, allergies, prefs, household)
+    household = ask_household()
+    print("Dietary needs:")
+    prefs = ask_choices(sorted(PREFERENCES), "Choose (numbers separated by spaces, Enter for none): ",
+                        many=True)
+    allergies = ask_allergies()
+    food_notes = ask("Food preferences or cultural needs (optional, e.g. no pork, prefers rice): ")
+    phone, email, method = ask_contact("", "")
+    language = ask("Preferred language (optional): ")
+    print("Accessibility needs (optional):")
+    access = ask_choices(ACCESSIBILITY_NEEDS, "Choose (numbers separated by spaces, Enter for none): ",
+                         many=True)
+    client = manager.add_client(name, phone, allergies, prefs, household=household, email=email,
+                                contact_method=method, accessibility_needs=access,
+                                food_notes=food_notes, language=language)
     print(f"Saved. {client.name} is client #{client.id}.")
+
+
+EDIT_FIELDS = [
+    ("Name", "name"), ("Household", "household"), ("Dietary needs", "preferences"),
+    ("Allergies", "allergies"), ("Food preferences / cultural needs", "food_notes"),
+    ("Contact details and method", "contact"), ("Preferred language", "language"),
+    ("Accessibility needs", "accessibility_needs"),
+]
+
+
+def edit_client(manager, client):
+    label = ask_choices([f[0] for f in EDIT_FIELDS], "What would you like to change? ")
+    field = dict(EDIT_FIELDS)[label]
+    if field == "name":
+        changes = {"name": ask("New name: ")}
+    elif field == "household":
+        changes = {"household": ask_household()}
+    elif field == "preferences":
+        changes = {"preferences": ask_choices(sorted(PREFERENCES),
+                                              "Choose (Enter for none): ", many=True)}
+    elif field == "allergies":
+        changes = {"allergies": ask_allergies()}
+    elif field == "food_notes":
+        changes = {"food_notes": ask("Food preferences or cultural needs: ")}
+    elif field == "language":
+        changes = {"language": ask("Preferred language: ")}
+    elif field == "accessibility_needs":
+        changes = {"accessibility_needs": ask_choices(ACCESSIBILITY_NEEDS,
+                                                      "Choose (Enter for none): ", many=True)}
+    else:
+        phone = ask(f"Phone (Enter to keep '{client.phone or 'none'}', '-' to remove): ")
+        email = ask(f"Email (Enter to keep '{client.email or 'none'}', '-' to remove): ")
+        phone = "" if phone == "-" else (phone or client.phone)
+        email = "" if email == "-" else (email or client.email)
+        phone, email, method = ask_contact(phone, email)
+        changes = {"phone": phone, "email": email, "contact_method": method}
+    manager.update_client(client.id, **changes)
+    print("Saved.")
+
+
+def client_details_screen(manager):
+    """Staff/admin view of one client's full profile, with editing and private notes."""
+    list_clients(manager)
+    client_id = ask_int("\nClient number (blank to go back): ", allow_blank=True)
+    if client_id is None:
+        return
+    while True:
+        client = manager.find_client(client_id)
+        if client is None:
+            print("No client with that number.")
+            return
+        print("\n" + client.staff_details())
+        print("\n[e] Edit details  [n] Add a private note  [b] Back")
+        choice = ask("Choose: ").lower()
+        try:
+            if choice == "b":
+                return
+            elif choice == "e":
+                edit_client(manager, client)
+            elif choice == "n":
+                manager.add_client_note(client.id, ask("Note (staff only): "))
+                print("Note saved.")
+            else:
+                print("Please choose one of the letters shown.")
+        except (ValueError, PermissionError) as e:
+            print(f"Can't do that: {e}")
 
 
 def show_hamper(manager, hamper):
@@ -304,6 +429,7 @@ MENU = [
     ("5", "Prepare a hamper", ("pack_hamper", "create_hamper"), prepare_hamper_screen),
     ("6", "Add a user", "manage_users", add_user_screen),
     ("7", "Pickups", ("record_pickup", "manage_pickups"), pickups_screen),
+    ("8", "Client details (edit, private notes)", "manage_clients", client_details_screen),
 ]
 
 

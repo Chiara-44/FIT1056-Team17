@@ -80,6 +80,13 @@ class ScheduleManager:
                 r.get("allergies", {}),
                 r.get("preferences", []),
                 r.get("household_size", 1),
+                household=r.get("household"),
+                email=r.get("email", ""),
+                contact_method=r.get("contact_method"),
+                accessibility_needs=r.get("accessibility_needs", []),
+                food_notes=r.get("food_notes", ""),
+                language=r.get("language", ""),
+                private_notes=r.get("private_notes", []),
             )
             for r in records
         ]
@@ -283,9 +290,16 @@ class ScheduleManager:
 
     # ---------- Clients ----------
 
-    def add_client(self, name, phone, allergies, preferences, household_size=1):
+    def add_client(self, name, phone, allergies, preferences, household_size=1, **details):
+        """Registers a client (FR-04, FR-06 to FR-08).
+
+        details can include household (adults/children/infants), email, contact_method,
+        accessibility_needs, food_notes and language. Only staff and admins can do this.
+        """
         self.require_permission("manage_clients")
-        client = Client(self.next_client_id, name, phone, allergies, preferences, household_size)
+        details.pop("private_notes", None)  # notes are added with add_client_note instead
+        client = Client(self.next_client_id, name, phone, allergies, preferences,
+                        household_size, **details)
         self.clients.append(client)
         self.next_client_id += 1
         self._save_data()
@@ -612,9 +626,42 @@ class ScheduleManager:
         # TODO: Handle IDs that currently overlap across the three role collections.
         raise NotImplementedError
 
+    # Fields staff are allowed to change with update_client
+    EDITABLE_CLIENT_FIELDS = ("name", "phone", "email", "contact_method", "allergies",
+                              "preferences", "household", "accessibility_needs",
+                              "food_notes", "language")
+
     def update_client(self, client_id, **changes):
-        # TODO [FR-05]: Require manage_clients, validate allowed changes and save.
-        raise NotImplementedError
+        """Updates a client's details (FR-05).
+
+        The changed client is fully checked before anything is saved, so if any value is
+        invalid the original record stays exactly as it was.
+        """
+        self.require_permission("manage_clients")
+        client = self._get_client(client_id)
+        unknown = set(changes) - set(self.EDITABLE_CLIENT_FIELDS)
+        if unknown:
+            raise ValueError(f"These details can't be changed here: {', '.join(sorted(unknown))}")
+
+        data = client.to_dict()
+        data.update(changes)
+        updated = Client(client.id, data["name"], data["phone"], data["allergies"],
+                         data["preferences"], household=data["household"],
+                         email=data["email"], contact_method=data["contact_method"],
+                         accessibility_needs=data["accessibility_needs"],
+                         food_notes=data["food_notes"], language=data["language"],
+                         private_notes=client.private_notes)
+        self.clients[self.clients.index(client)] = updated
+        self._save_data()
+        return updated
+
+    def add_client_note(self, client_id, text):
+        """Adds a private note that only staff and admins can see."""
+        self.require_permission("manage_clients")
+        client = self._get_client(client_id)
+        client.add_private_note(text, self.current_user.username)
+        self._save_data()
+        return client
 
     def search_inventory(self, filters):
         # TODO [FR-11..12]: Search/filter items and flag unsafe/near-expiry batches.
