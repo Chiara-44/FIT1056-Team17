@@ -67,14 +67,11 @@ def test_plain_passwords_in_file_are_hashed_on_load(tmp_path):
 
 
 def test_add_user_then_login(tmp_path):
-
     manager = ScheduleManager(str(tmp_path / "data.json"))
-
+    manager.add_user("Admin", "admin", "admin123", "admin")
+    manager.login("admin", "admin123", "admin")
     manager.add_user("Sam", "sam", "vol123", "volunteer")
 
-
     reloaded = ScheduleManager(str(tmp_path / "data.json"))
-
     assert reloaded.login("sam", "vol123", "volunteer") is not None
-
     assert reloaded.login("sam", "wrong", "volunteer") is None

@@ -277,7 +277,7 @@ class ScheduleManager:
         Only admins may create accounts, except when there are no admins yet
         (first-time setup and tests).
         """
-        if self.admins:
+        if not self.needs_setup():
             self.require_permission("manage_users")
         elif role != "admin":
             raise ValueError("The first account must be an admin")

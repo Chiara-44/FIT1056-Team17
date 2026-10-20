@@ -125,7 +125,7 @@ def test_e2e_04_staff_records_donation(tmp_path):
     path = write_data(tmp_path)
     screen = run_app(path, [
         "staff", "angela", "staff123",
-        "2", "Rice", "5", "", "", "vegan", FUTURE, "Jessi Lim", "",
+        "2", "Rice", "5", "", "", "3", FUTURE, "Jessi Lim", "",
         "q",
     ])
     assert "Rice now has 35 in stock" in screen
@@ -133,19 +133,22 @@ def test_e2e_04_staff_records_donation(tmp_path):
     assert saved["donations"][0]["donor"] == "Jessi Lim"
 
 
-def test_e2e_05_invalid_donation_shows_message_without_crashing(tmp_path):
+def test_e2e_05_invalid_donation_input_is_asked_again(tmp_path):
     """Fault tolerance (NFR-07): a typo gives a clear message and the app keeps running."""
     path = write_data(tmp_path)
     screen = run_app(path, [
         "staff", "angela", "staff123",
-        "2", "Muesli", "4", "nutz", "", "", "", "", "",
-        "1", "",  # app is still usable afterwards
+        "2", "Muesli", "4",
+        "nutz", "",          # bad pick, asked again, then none
+        "", "",              # may contain: none, suitable for: none
+        "2026-13-45", "",    # bad date, asked again, then no expiry
+        "", "",              # no donor, press Enter
+        "1", "",             # app is still usable afterwards
         "q",
     ])
-    assert "Can't do that: Unknown allergen: 'nutz'" in screen
-    assert "Current stock" in screen
-    saved = json.loads(path.read_text())
-    assert all(i["name"] != "Muesli" for i in saved["storeroom"])
+    assert "Please type a number from 1 to 9" in screen
+    assert "Expiry date must look like YYYY-MM-DD" in screen
+    assert "Muesli now has 4 in stock" in screen
 
 
 def test_e2e_06_substitution_note(tmp_path):
@@ -168,10 +171,11 @@ def test_e2e_07_admin_creates_user_who_can_log_in(tmp_path):
     path = write_data(tmp_path)
     screen = run_app(path, [
         "admin", "admin", "admin123",
-        "6", "Sam Lee", "sam", "volunteer", "secret1", "",
+        "6", "Sam Lee", "sam", "1", "secret1", "",
         "l",
         "volunteer", "sam", "secret1", "q",
     ])
+    print(screen)
     assert "Created volunteer account 'sam'" in screen
     assert "Welcome, Sam Lee!" in screen
 

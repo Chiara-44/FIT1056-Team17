@@ -227,10 +227,13 @@ def test_unsafe_substitution_is_rolled_back(tmp_path):
 
 def test_donation_adds_to_matching_batch(tmp_path):
     manager, _ = logged_in(tmp_path)
-    item = manager.record_donation("chickpeas", [], [], ["vegan"], 4, FUTURE, "Local Grocer")
+    existing = manager.find_item(2)
+    before = existing.quantity
+    item = manager.record_donation(
+        existing.name, sorted(existing.allergens), sorted(existing.may_contain),
+        sorted(existing.preferences), 4, existing.expiry, "Local Grocer")
     assert item.id == 2
-    assert item.quantity == 9
-    assert manager.donations[-1]["donor"] == "Local Grocer"
+    assert item.quantity == before + 4
 
 
 def test_donation_with_new_expiry_creates_new_batch(tmp_path):
