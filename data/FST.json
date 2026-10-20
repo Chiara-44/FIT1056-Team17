@@ -31,6 +31,8 @@
             "id": 1,
             "name": "Maya Donald",
             "phone": "0400 000 000",
+            "email": "",
+            "contact_method": "sms",
             "allergies": {
                 "peanuts": "severe",
                 "tree nuts": "severe"
@@ -38,17 +40,37 @@
             "preferences": [
                 "vegan"
             ],
-            "household_size": 1
+            "household_size": 1,
+            "household": {
+                "adults": 1,
+                "children": 0,
+                "infants": 0
+            },
+            "accessibility_needs": [],
+            "food_notes": "",
+            "language": "",
+            "private_notes": []
         },
         {
             "id": 2,
             "name": "Alex Nguyen",
             "phone": "0411 111 111",
+            "email": "",
+            "contact_method": "sms",
             "allergies": {
                 "dairy": "mild"
             },
             "preferences": [],
-            "household_size": 3
+            "household_size": 3,
+            "household": {
+                "adults": 3,
+                "children": 0,
+                "infants": 0
+            },
+            "accessibility_needs": [],
+            "food_notes": "",
+            "language": "",
+            "private_notes": []
         }
     ],
     "storeroom": [
@@ -153,14 +175,38 @@
             ],
             "quantity": 6,
             "expiry": "2026-10-05"
+        },
+        {
+            "id": 8,
+            "name": "Biscoff",
+            "allergens": [
+                "dairy"
+            ],
+            "may_contain": [],
+            "preferences": [
+                "vegan"
+            ],
+            "quantity": 5,
+            "expiry": "2026-12-27"
         }
     ],
     "hampers": [],
-    "donations": [],
+    "pickups": [],
+    "donations": [
+        {
+            "item_id": 8,
+            "name": "Biscoff",
+            "quantity": 5,
+            "donor": "",
+            "date": "2026-10-20",
+            "recorded_by": "admin"
+        }
+    ],
     "next_volunteer_id": 2,
     "next_staff_id": 2,
     "next_admin_id": 2,
     "next_client_id": 3,
-    "next_item_id": 8,
-    "next_hamper_id": 1
+    "next_item_id": 9,
+    "next_hamper_id": 1,
+    "next_pickup_id": 1
 }

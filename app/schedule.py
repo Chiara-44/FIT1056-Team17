@@ -14,6 +14,7 @@ from app.clients import Client
 from app.storeroom import FoodbankItem, clean_quantity, clean_allergens, parse_expiry
 from app.hampers import Hamper, COMPLETED
 from app.pickups import Pickup, parse_pickup_time
+from app.tasks import Task, StockReport
 
 
 # list of valid roles
@@ -39,6 +40,10 @@ class ScheduleManager:
         self.hampers = []
         self.pickups = []
         self.donations = []
+        self.tasks = []
+        self.stock_reports = []
+        
+        self.next_report_id = 1
         self.next_volunteer_id = 1
         self.next_staff_id = 1
         self.next_admin_id = 1
@@ -46,6 +51,8 @@ class ScheduleManager:
         self.next_item_id = 1
         self.next_hamper_id = 1
         self.next_pickup_id = 1
+        self.next_task_id = 1
+
         self.current_user = None
         self._needs_resave = False
 
@@ -163,6 +170,8 @@ class ScheduleManager:
             self.storeroom = self._build_items(data.get("storeroom", []))
             self.hampers = self._build_hampers(data.get("hampers", []))
             self.pickups = self._build_pickups(data.get("pickups", []))
+            self.tasks = [Task(**r) for r in data.get("tasks", [])]
+            self.stock_reports = [StockReport(**r) for r in data.get("stock_reports", [])]
         except ValueError as e:
             raise ValueError(f"Data file '{self.data_path}' has an invalid record: {e}")
         self.donations = list(data.get("donations", []))
@@ -174,6 +183,8 @@ class ScheduleManager:
         self.next_item_id = data.get("next_item_id", 1)
         self.next_hamper_id = data.get("next_hamper_id", 1)
         self.next_pickup_id = data.get("next_pickup_id", 1)
+        self.next_task_id = data.get("next_task_id", 1)
+        self.next_report_id = data.get("next_report_id", 1)
 
         # Replace any plain-text passwords in the file with hashes straight away
         if self._needs_resave:
@@ -194,6 +205,9 @@ class ScheduleManager:
             "storeroom": [i.to_dict() for i in self.storeroom],
             "hampers": [h.to_dict() for h in self.hampers],
             "pickups": [p.to_dict() for p in self.pickups],
+            "tasks": [t.to_dict() for t in self.tasks],
+            "stock_reports": [r.to_dict() for r in self.stock_reports],
+        
             "donations": self.donations,
             "next_volunteer_id": self.next_volunteer_id,
             "next_staff_id": self.next_staff_id,
@@ -202,6 +216,8 @@ class ScheduleManager:
             "next_item_id": self.next_item_id,
             "next_hamper_id": self.next_hamper_id,
             "next_pickup_id": self.next_pickup_id,
+            "next_task_id": self.next_task_id,
+            "next_report_id": self.next_report_id,
         }
         folder = os.path.dirname(self.data_path)
         if folder:
@@ -291,8 +307,8 @@ class ScheduleManager:
         return user
 
     def needs_setup(self):
-        """True when there's no admin yet, so the first one has to be created."""
-        return not self.admins
+        """True only on a brand-new install with no accounts at all."""
+        return not (self.volunteers or self.staff or self.admins)
 
     # ---------- Clients ----------
 
@@ -682,9 +698,100 @@ class ScheduleManager:
         # TODO [FR-10, NFR-12]: Record damaged/discarded stock with a reason.
         raise NotImplementedError
 
-    def manage_task(self, action, task_data):
-        # TODO [FR-20..25]: Add task creation/assignment/reassignment for authorised staff.
-        raise NotImplementedError
+
+    # ---Volunteer tasks (F-05)---
+
+    def _get_volunteer(self, username):
+        for volunteer in self.volunteers:
+            if volunteer.username == username:
+                return volunteer
+        raise ValueError(f"No volunteer with username '{username}'")
+
+    def find_task(self, task_id):
+        for task in self.tasks:
+            if task.id == task_id:
+                return task
+        return None
+
+    def _get_task(self, task_id):
+        task = self.find_task(task_id)
+        if task is None:
+            raise ValueError(f"No task with number {task_id}")
+        return task
+
+    def create_task(self, title, description="", assign_to=""):
+        """Creates a volunteer task, optionally assigning it straight away (FR-20, FR-21)."""
+        self.require_permission("manage_tasks")
+        if assign_to:
+            self._get_volunteer(assign_to)
+        task = Task(self.next_task_id, title, description, assigned_to=assign_to,
+                    created_by=self.current_user.username)
+        self.tasks.append(task)
+        self.next_task_id += 1
+        self._save_data()
+        return task
+
+    def assign_task(self, task_id, username):
+        """Assigns a task to a volunteer, or reassigns it to another one (FR-21, FR-22)."""
+        self.require_permission("manage_tasks")
+        task = self._get_task(task_id)
+        self._get_volunteer(username)
+        task.assign(username)
+        self._save_data()
+        return task
+
+    def all_tasks(self):
+        """Every task, unfinished ones first, for staff and admins."""
+        self.require_permission("manage_tasks")
+        return sorted(self.tasks, key=lambda t: (t.is_done(), t.id))
+
+    def tasks_for_current_user(self):
+        """The logged-in volunteer's own tasks, unfinished ones first (FR-23).
+
+        Checks the role as well as the username, because a staff member could
+        share a username with a volunteer.
+        """
+        self.require_permission("view_own_tasks")
+        user = self.current_user
+        if user.role != "volunteer":
+            return []
+        mine = [t for t in self.tasks if t.assigned_to == user.username]
+        return sorted(mine, key=lambda t: (t.is_done(), t.id))
+
+    def update_task_progress(self, task_id, status, note=""):
+        """Lets a volunteer update one of their own tasks (FR-24)."""
+        self.require_permission("update_task")
+        task = self._get_task(task_id)
+        user = self.current_user
+        if not (user.role == "volunteer" and task.assigned_to == user.username):
+            raise PermissionError("You can only update tasks assigned to you")
+        task.update_progress(status, note)
+        self._save_data()
+        return task
+
+    def report_stock_problem(self, item_id, problem, quantity, note=""):
+        """Records that stock is damaged, expired or missing (FR-25).
+
+        Stock isn't changed here. Staff review open reports and adjust stock.
+        """
+        self.require_permission("report_stock")
+        item = self._get_item(item_id)
+        quantity = clean_quantity(quantity)
+        if quantity == 0:
+            raise ValueError("Quantity must be at least 1")
+        if quantity > item.quantity:
+            raise ValueError(f"There are only {item.quantity} x {item.name} in stock")
+        report = StockReport(self.next_report_id, item.id, problem, quantity, note,
+                             reported_by=self.current_user.username)
+        self.stock_reports.append(report)
+        self.next_report_id += 1
+        self._save_data()
+        return report
+
+    def open_stock_reports(self):
+        """Stock problems that staff haven't dealt with yet."""
+        self.require_permission("manage_inventory")
+        return [r for r in self.stock_reports if not r.resolved]
 
     def generate_report(self, report_type):
         # TODO [FR-28..32]: Require run_reports; report stock, expiry, shortages,

@@ -14,9 +14,12 @@ from getpass import getpass
 from app.schedule import ScheduleManager, ROLES, DEFAULT_DATA_PATH
 from app.storeroom import ALLERGENS, PREFERENCES, parse_expiry
 from app.clients import CONTACT_METHODS, ACCESSIBILITY_NEEDS, SEVERITIES
-
+from app.tasks import TASK_STATUSES, STOCK_PROBLEMS
 
 # ---------- Small input helpers ----------
+
+
+
 
 def ask(prompt):
     return input(prompt).strip()
@@ -457,6 +460,112 @@ def pickups_screen(manager):
         except (ValueError, PermissionError) as e:
             print(f"Can't do that: {e}")
 
+# ---------- Volunteer tasks (F-05) ----------
+
+def print_tasks(tasks, empty_message):
+    if not tasks:
+        print(empty_message)
+        return
+    for task in tasks:
+        print(task.summary())
+        if task.description:
+            print(f"      {task.description}")
+        if task.progress_note:
+            print(f"      Progress: {task.progress_note}")
+
+
+def my_tasks_screen(manager):
+    """FR-23, FR-24: a volunteer sees their tasks and updates progress."""
+    while True:
+        print("\n--- My tasks ---")
+        tasks = manager.tasks_for_current_user()
+        print_tasks(tasks, "You don't have any tasks right now.")
+        print("\n[u] Update a task  [b] Back")
+        choice = ask("Choose: ").lower()
+        try:
+            if choice == "b":
+                return
+            elif choice == "u":
+                task_id = ask_int("Task number: ")
+                print("New status:")
+                status = ask_choices(TASK_STATUSES, "Choose: ")
+                note = ask("Progress note (optional, Enter to skip): ")
+                task = manager.update_task_progress(task_id, status, note)
+                print(f"Saved. Task #{task.id} is now '{task.status}'.")
+            else:
+                print("Please choose one of the letters shown.")
+        except (ValueError, PermissionError) as e:
+            print(f"Can't do that: {e}")
+
+
+def choose_volunteer(manager, allow_none=False):
+    """Pick a volunteer by number. Returns their username, or '' for nobody."""
+    usernames = [v.username for v in manager.volunteers]
+    if not usernames:
+        raise ValueError("There are no volunteer accounts yet")
+    options = [f"{v.name} ({v.username})" for v in manager.volunteers]
+    if allow_none:
+        options.append("Nobody yet")
+    pick = ask_choices(options, "Choose: ")
+    index = options.index(pick)
+    return usernames[index] if index < len(usernames) else ""
+
+
+def manage_tasks_screen(manager):
+    """FR-20 to FR-22: staff create, assign and reassign volunteer tasks."""
+    while True:
+        print("\n--- Volunteer tasks ---")
+        print_tasks(manager.all_tasks(), "No tasks yet.")
+        print("\n[n] New task  [a] Assign or reassign a task  [b] Back")
+        choice = ask("Choose: ").lower()
+        try:
+            if choice == "b":
+                return
+            elif choice == "n":
+                title = ask("Task title: ")
+                description = ask("Details (optional): ")
+                print("Who should do it?")
+                username = choose_volunteer(manager, allow_none=True)
+                task = manager.create_task(title, description, assign_to=username)
+                print(f"Created task #{task.id}.")
+            elif choice == "a":
+                task_id = ask_int("Task number: ")
+                print("Assign it to:")
+                username = choose_volunteer(manager)
+                task = manager.assign_task(task_id, username)
+                print(f"Task #{task.id} is now assigned to {task.assigned_to}.")
+            else:
+                print("Please choose one of the letters shown.")
+        except (ValueError, PermissionError) as e:
+            print(f"Can't do that: {e}")
+
+
+def report_stock_screen(manager):
+    """FR-25: report damaged, expired or missing stock for staff to check."""
+    show_stock(manager)
+    print("\n--- Report a stock problem ---")
+    item_id = ask_int("Item number (blank to go back): ", allow_blank=True)
+    if item_id is None:
+        return
+    print("What's wrong?")
+    problem = ask_choices(STOCK_PROBLEMS, "Choose: ")
+    quantity = ask_int("How many: ")
+    note = ask("Details (optional): ")
+    manager.report_stock_problem(item_id, problem, quantity, note)
+    print("Thanks, staff will check it. The stock count hasn't been changed yet.")
+
+
+def stock_reports_screen(manager):
+    """Staff view of stock problems volunteers have reported."""
+    print("\n--- Reported stock problems ---")
+    reports = manager.open_stock_reports()
+    if not reports:
+        print("Nothing reported.")
+    for r in reports:
+        item = manager.find_item(r.item_id)
+        name = item.name if item else f"item #{r.item_id}"
+        line = f"#{r.id:<3} {r.reported_on}  {r.quantity} x {name} {r.problem} (by {r.reported_by})"
+        print(line + (f"\n      {r.note}" if r.note else ""))
 
 # Each menu option: (key, label, permission needed (None = any logged-in user), function)
 MENU = [
@@ -468,6 +577,10 @@ MENU = [
     ("6", "Add a user", "manage_users", add_user_screen),
     ("7", "Pickups", ("record_pickup", "manage_pickups"), pickups_screen),
     ("8", "Client details (edit, private notes)", "manage_clients", client_details_screen),
+    ("9", "My tasks", "view_own_tasks", my_tasks_screen),
+    ("10", "Volunteer tasks", "manage_tasks", manage_tasks_screen),
+    ("11", "Report a stock problem", "report_stock", report_stock_screen),
+    ("12", "Reported stock problems", "manage_inventory", stock_reports_screen),
 ]
 
 
