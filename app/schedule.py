@@ -255,7 +255,6 @@ class ScheduleManager:
         if not any(self.can(p) for p in permissions):
             raise PermissionError(f"Your role ({self.current_user.role}) can't do this.")
 
-    # TODO: Define a separate first-admin setup path.
     def add_user(self, name, username, password, role):
         """Creates a user with a hashed password. Returns the new User.
 
@@ -264,6 +263,8 @@ class ScheduleManager:
         """
         if self.admins:
             self.require_permission("manage_users")
+        elif role != "admin":
+            raise ValueError("The first account must be an admin")
         if role not in ROLES:
             raise ValueError(f"Role must be one of {ROLES}")
         if not name.strip() or not username.strip():
@@ -288,6 +289,10 @@ class ScheduleManager:
         self._users_for_role(role).append(user)
         self._save_data()
         return user
+
+    def needs_setup(self):
+        """True when there's no admin yet, so the first one has to be created."""
+        return not self.admins
 
     # ---------- Clients ----------
 
@@ -340,15 +345,15 @@ class ScheduleManager:
         if item is None:
             raise ValueError(f"No stock item with number {item_id}")
         return item
+    
 
     def record_donation(self, name, allergens, may_contain, preferences, quantity,
                         expiry=None, donor=""):
-        """Records an incoming donation and adds it to stock (FR-09, FR-10).
-
-        If a matching batch already exists (same name, allergens and expiry) its quantity
-        goes up; otherwise a new stock item is created. Every donation is also kept in
-        a history list for later reporting.
+        """ If a matching batch already exists (same name, allergens, 
+        may-contain, dietary tags and expiry) its quantity goes up; 
+        otherwise a new stock item is created.
         """
+
         self.require_permission("manage_inventory")
         quantity = clean_quantity(quantity)
         if quantity == 0:
@@ -358,20 +363,24 @@ class ScheduleManager:
             raise ValueError("This item has already expired and can't be added to stock")
         allergens = clean_allergens(allergens)
         may_contain = clean_allergens(may_contain)
+        preferences = {p.strip().lower() for p in preferences if p.strip()}
+
 
         match = None
         for item in self.storeroom:
-            if (item.name.lower() == name.strip().lower() and item.allergens == allergens
-                    and item.may_contain == may_contain and item.expiry == expiry):
+            if (item.name.lower() == name.strip().lower()
+                    and item.allergens == allergens
+                    and item.may_contain == may_contain
+                    and item.preferences == preferences
+                    and item.expiry == expiry):
                 match = item
                 break
 
         if match:
             match.quantity += quantity
             item = match
-            self._save_data()
         else:
-            item = self.add_item(name, sorted(allergens), sorted(may_contain), preferences,
+            item = self.add_item(name, sorted(allergens), sorted(may_contain), sorted(preferences),
                                  quantity, expiry)
 
         self.donations.append({

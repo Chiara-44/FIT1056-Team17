@@ -66,7 +66,24 @@ def login_prompt(manager):
             return user
         print("That username and password don't match. Please try again.")
 
-
+def first_admin_setup(manager):
+    """Runs once on a fresh install, when no admin account exists yet."""
+    print("\n=== First-time setup ===")
+    print("No admin account exists yet. Create one to get started.")
+    while True:
+        name = ask("Full name: ")
+        username = ask("Username: ")
+        password = getpass("Password (min 6 characters, hidden): ")
+        if password != getpass("Confirm password: "):
+            print("Passwords don't match. Please try again.")
+            continue
+        try:
+            user = manager.add_user(name, username, password, "admin")
+        except ValueError as e:
+            print(f"Can't do that: {e}")
+            continue
+        print(f"Admin account '{user.username}' created. You can now log in.")
+        return
 # ---------- Screens ----------
 
 def show_stock(manager):
@@ -88,17 +105,20 @@ def show_stock(manager):
 
 def record_donation_screen(manager):
     print("\n--- Record a donation ---")
-    print(f"Allergens: {', '.join(sorted(ALLERGENS))}")
-    print(f"Dietary tags: {', '.join(sorted(PREFERENCES))}")
     name = ask("Item name: ")
     quantity = ask_int("Quantity: ")
-    allergens = ask_list("Contains (comma separated, blank for none): ")
-    may_contain = ask_list("May contain (comma separated, blank for none): ")
-    prefs = ask_list("Suitable for (comma separated, blank for none): ")
-    expiry = ask("Expiry date YYYY-MM-DD (blank if none): ")
+    print("Contains:")
+    allergens = ask_choices(sorted(ALLERGENS), "Choose (numbers separated by spaces, Enter for none): ",
+                            many=True)
+    print("May contain traces of:")
+    may_contain = ask_choices(sorted(ALLERGENS), "Choose (numbers separated by spaces, Enter for none): ",
+                              many=True)
+    print("Suitable for:")
+    prefs = ask_choices(sorted(PREFERENCES), "Choose (numbers separated by spaces, Enter for none): ",
+                        many=True)
+    expiry = ask_expiry("Expiry date YYYY-MM-DD (blank if none): ")
     donor = ask("Donor name (optional): ")
-    item = manager.record_donation(name, allergens, may_contain, prefs, quantity,
-                                   expiry or None, donor)
+    item = manager.record_donation(name, allergens, may_contain, prefs, quantity, expiry, donor)
     print(f"Thanks! Recorded. {item.name} now has {item.quantity} in stock (item #{item.id}).")
 
 
@@ -157,6 +177,20 @@ def ask_allergies():
         print(f"How serious is the {allergen} allergy?")
         allergies[allergen] = ask_choices(SEVERITIES, "  Choose: ")
     return allergies
+
+def ask_expiry(prompt):
+    """Keeps asking until the date is blank or a valid date that hasn't passed."""
+    while True:
+        text = ask(prompt)
+        try:
+            expiry = parse_expiry(text)
+        except ValueError as e:
+            print(f"  {e}")
+            continue
+        if expiry and expiry < date.today():
+            print("  That date has already passed.")
+            continue
+        return expiry
 
 
 def ask_contact(phone, email):
@@ -346,7 +380,7 @@ def add_user_screen(manager):
     print("\n--- Add a user ---")
     name = ask("Full name: ")
     username = ask("Username: ")
-    role = ask(f"Role ({'/'.join(ROLES)}): ").lower()
+    role = ask_choices(ROLES, "Role: ")
     password = getpass("Temporary password (min 6 characters, hidden): ")
     user = manager.add_user(name, username, password, role)
     print(f"Created {user.role} account '{user.username}'.")
@@ -484,8 +518,10 @@ def main(data_path=DEFAULT_DATA_PATH):
     except (ValueError, OSError) as e:
         print(f"FoodShare Tracker couldn't start: {e}")
         return
-
+    
     try:
+        if manager.needs_setup():
+            first_admin_setup(manager)
         while True:
             if login_prompt(manager) is None:
                 break
