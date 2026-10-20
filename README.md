@@ -41,12 +41,15 @@ python -m pytest
 | Client registration | Staff record name, household (adults, children, infants), dietary needs, allergies with severity, food/cultural preferences, preferred language, accessibility needs and how the client wants to be contacted. Options are picked from numbered lists. | F-02, FR-04, FR-06 to FR-08 |
 | Client details | Staff and admins can view a client's full profile, edit any detail (checked before saving, so a mistake changes nothing) and add private notes that volunteers never see. | FR-05, NFR-02 |
 | Privacy-aware client view | Volunteers see only client number, first name and food requirements, never contact details. | NFR-02, NFR-15 |
-| Donations and stock | Staff record donations with allergens, "may contain" traces, dietary tags and expiry dates. Matching batches are merged and each donation is logged. Expired donations are refused. | F-03, FR-09, FR-10 |
+| Donations and stock | Staff record donations with allergens, "may contain" traces, dietary tags and expiry dates, all picked from numbered lists. A bad expiry date is asked again without losing what was typed. A donation only merges into an existing batch if the name, allergens, may-contain, dietary tags and expiry all match, so untagged stock can't be offered as vegan. Expired donations are refused. | F-03, FR-09, FR-10 |
 | Hamper preparation (UC-01) | Shows the client's needs, requires the packer to confirm a severe allergy warning, lists only safe in-stock items, and blocks unsafe, unsuitable, expired or out-of-stock items. | F-04, FR-14 to FR-17 |
 | Substitution | Swaps an item for a safe replacement and saves a respectful note for the client with no medical details. An unsafe swap is rolled back. | FR-18, FR-19 |
 | Completing a hamper | Re-checks every item, then deducts stock and saves. If any check fails, nothing changes. Draft hampers can be cancelled without using stock. | FR-14 |
 | Pickups | Staff book a pickup time for a completed hamper (DD/MM/YYYY or YYYY-MM-DD), change or cancel it. Staff and volunteers see the day's pickups and record collections. The pickup list shows only the client number and first name. | F-06, FR-26, FR-27, NFR-15 |
 | Safe saving | Data is written to a temporary file then swapped in, so a crash during saving can't corrupt the data file. Bad data shows a clear message instead of crashing. | NFR-11 |
+| First-time setup | On a brand-new install with no accounts, the app asks for the first admin account before showing the login screen. The first account must be an admin, and after that only admins can add users. | FR-01, FR-02 |
+| Volunteer tasks | Staff create tasks, assign them to a volunteer and reassign them. Volunteers see their own tasks (unfinished first) and update the status and a progress note. | F-05, FR-20 to FR-24 |
+| Stock problem reports | Volunteers report damaged, expired or missing stock. Reports don't change the stock count; staff see them under "Reported stock problems". | FR-25 |
 
 ## App
 ### clients.py
@@ -145,14 +148,17 @@ client_allergies is a dict like {"peanuts": "severe", "dairy": "mild"}.
 │   └── users.py       User class, password hashing (hashlib), role permission matrix
 ├── data
 │   └── FST.json       Sample data (users, clients, stock, hampers, donations)
-├── test
+├── gui
+├── tests
 │   ├── food_requirement_test.py   Allergy and diet safety rules
 │   ├── functional_test.py         End-to-end, boundary and MC/DC tests through the menus
 │   ├── hamper_item_test.py        HamperItem lines, quantities and recorded substitutions
 │   ├── hamper_test.py             Permissions, hampers, donations, privacy, boundaries
 │   ├── client_test.py             Household, contact method, editing, private notes, privacy
 │   ├── password_test.py           Password hashing and login
-│   └── pickup_test.py             Booking, collection, privacy and boundary tests for pickups
+│   ├── pickup_test.py             Booking, collection, privacy and boundary tests for pickups
+│   ├── task_test.py               Volunteer tasks, permissions, stock reports, 
+│   └── test_schedule.py           First-admin setup and donation merging rules
 ├── conftest.py        Lets pytest find the app package
 ├── main.py            Command-line menus
 ├── README.md
@@ -162,9 +168,10 @@ client_allergies is a dict like {"peanuts": "severe", "dairy": "mild"}.
 ## Known issues and not yet implemented
 - The interface is a command-line app rather than the Tkinter GUI planned in Deliverable 1,
   and data is stored in JSON rather than SQLite.
-- Volunteer tasks (F-05) and reports (F-07) are not built yet. Their methods in `schedule.py`
-  raise `NotImplementedError`.
-- Changing user roles, searching stock and recording damaged stock are not built yet.
+- Reports (F-07) are not built yet. `generate_report` in `schedule.py` raises `NotImplementedError`.
+- Changing user roles, searching stock and recording damaged stock are not built yet. Stock
+  problems volunteers report can be viewed but not yet resolved.
+- Only one copy of the app should run at a time. Two copies would overwrite each other's saves.
 - If the app is closed while a hamper is being packed, that draft hamper stays in the data
   file. It doesn't affect stock.
 - In some IDE consoles (for example IDLE), the password may still be visible while typing.
