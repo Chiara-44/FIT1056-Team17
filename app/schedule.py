@@ -794,6 +794,35 @@ class ScheduleManager:
         return [r for r in self.stock_reports if not r.resolved]
 
     def generate_report(self, report_type):
-        # TODO [FR-28..32]: Require run_reports; report stock, expiry, shortages,
-        # donations and hamper distribution from saved data.
-        raise NotImplementedError
+        """Generates operational reports (FR-28 to FR-32)."""
+        self.require_permission("run_reports") # Blocks unauthorized users
+        
+        if report_type == "stock":
+            # FR-28: Current stock levels
+            return [{"id": item.id, "name": item.name, "quantity": item.quantity} 
+                    for item in self.storeroom]
+                    
+        elif report_type == "expiry":
+            # FR-29: Items that are expired or expiring today
+            today = date.today()
+            return [{"id": item.id, "name": item.name, "quantity": item.quantity, "expiry": item.expiry.isoformat()} 
+                    for item in self.storeroom if item.expiry and item.expiry <= today]
+                    
+        elif report_type == "shortages":
+            # FR-30: Items with a dangerously low stock (under 10 items)
+            return [{"id": item.id, "name": item.name, "quantity": item.quantity} 
+                    for item in self.storeroom if item.quantity < 10]
+                    
+        elif report_type == "donations":
+            # FR-31: History of all logged donations
+            return self.donations
+            
+        elif report_type == "hampers":
+            # FR-32: Overview of hamper distribution
+            completed = [h for h in self.hampers if h.status == COMPLETED]
+            return {
+                "total_completed": len(completed),
+                "total_drafts": len(self.hampers) - len(completed)
+            }
+        else:
+            raise ValueError(f"Unknown report type: {report_type}")
