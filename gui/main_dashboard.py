@@ -1,4 +1,11 @@
 """Streamlit entry point for FoodShare Tracker."""
+import os
+import sys
+
+# Streamlit only adds the gui folder to the import path, so add the project folder
+# as well. This lets "from app..." and "from gui..." work however the app is started.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import streamlit as st
 from app.schedule import ScheduleManager, ROLES
 

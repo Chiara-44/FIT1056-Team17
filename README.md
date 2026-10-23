@@ -10,10 +10,17 @@ Requires Python 3.10 or newer.
 
 ```bash
 pip install -r requirements.txt
-python main.py
 ```
 
-Run the commands from the project folder (the folder containing `main.py`).
+Then start either interface from the project folder (the folder containing `main.py`):
+
+| Interface | Command |
+|---|---|
+| Web interface (Streamlit) | `python -m streamlit run gui/main_dashboard.py` |
+| Command-line interface | `python main.py` |
+
+The web interface opens in your browser (usually at http://localhost:8501). Both
+interfaces use the same rules and the same data file, so you can switch between them.
 
 ### Demo logins
 
@@ -32,7 +39,7 @@ hashes automatically the first time the app loads the file.
 python -m pytest
 ```
 
-## Features implemented (draft MVP)
+## Features implemented
 
 | Feature | What works | Requirements |
 |---|---|---|
@@ -50,6 +57,7 @@ python -m pytest
 | First-time setup | On a brand-new install with no accounts, the app asks for the first admin account before showing the login screen. The first account must be an admin, and after that only admins can add users. | FR-01, FR-02 |
 | Volunteer tasks | Staff create tasks, assign them to a volunteer and reassign them. Volunteers see their own tasks (unfinished first) and update the status and a progress note. | F-05, FR-20 to FR-24 |
 | Stock problem reports | Volunteers report damaged, expired or missing stock. Reports don't change the stock count; staff see them under "Reported stock problems". | FR-25 |
+| Operational reports | Admins generate current-stock, expiry, shortage (under 10 left), donation and hamper-distribution reports. Other roles are refused. | F-07, FR-28 to FR-32 |
 
 ## App
 ### clients.py
@@ -149,6 +157,14 @@ client_allergies is a dict like {"peanuts": "severe", "dairy": "mild"}.
 ├── data
 │   └── FST.json       Sample data (users, clients, stock, hampers, donations)
 ├── gui
+│   ├── main_dashboard.py   Streamlit entry point: login, first-admin setup, navigation
+│   ├── common.py           Shared helpers for the pages
+│   ├── client_pages.py     Register clients, view details, private notes
+│   ├── inventory_pages.py  Donations, stock and stock problem reports
+│   ├── hamper_pages.py     Prepare hampers with allergy checks and substitutions
+│   ├── pickup_pages.py     Book pickups and record collections
+│   ├── task_pages.py       Volunteer tasks
+│   └── admin_pages.py      User accounts and operational reports
 ├── tests
 │   ├── food_requirement_test.py   Allergy and diet safety rules
 │   ├── functional_test.py         End-to-end, boundary and MC/DC tests through the menus
@@ -157,6 +173,7 @@ client_allergies is a dict like {"peanuts": "severe", "dairy": "mild"}.
 │   ├── client_test.py             Household, contact method, editing, private notes, privacy
 │   ├── password_test.py           Password hashing and login
 │   ├── pickup_test.py             Booking, collection, privacy and boundary tests for pickups
+│   ├── report_test.py             Operational reports, permissions and boundaries
 │   ├── task_test.py               Volunteer tasks, permissions, stock reports, 
 │   └── test_schedule.py           First-admin setup and donation merging rules
 ├── conftest.py        Lets pytest find the app package
@@ -166,9 +183,8 @@ client_allergies is a dict like {"peanuts": "severe", "dairy": "mild"}.
 ```
 
 ## Known issues and not yet implemented
-- The interface is a command-line app rather than the Tkinter GUI planned in Deliverable 1,
-  and data is stored in JSON rather than SQLite.
-- Reports (F-07) are not built yet. `generate_report` in `schedule.py` raises `NotImplementedError`.
+- The graphical interface uses Streamlit instead of the Tkinter GUI planned in Deliverable 1,
+  and data is stored in JSON rather than SQLite. The command-line interface is still included.
 - Changing user roles, searching stock and recording damaged stock are not built yet. Stock
   problems volunteers report can be viewed but not yet resolved.
 - Only one copy of the app should run at a time. Two copies would overwrite each other's saves.
