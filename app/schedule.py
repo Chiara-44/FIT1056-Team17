@@ -1,8 +1,8 @@
 # filename: schedule.py
 # group: Team 17
-# names: Chiara
+# names: Chiara, Harry
 # created: 18/09/26
-# last modified: 16/10/26
+# last modified: 24/10/26
 
 
 import json
@@ -11,7 +11,8 @@ from datetime import date, datetime
 
 from app.users import User, hash_password, PERMISSIONS
 from app.clients import Client
-from app.storeroom import FoodbankItem, clean_quantity, clean_allergens, parse_expiry
+from app.storeroom import (FoodbankItem, clean_quantity, clean_allergens, parse_expiry,
+                           CONDITIONS, FLAGS)
 from app.hampers import Hamper, COMPLETED
 from app.pickups import Pickup, parse_pickup_time
 from app.tasks import Task, StockReport
@@ -19,6 +20,13 @@ from app.tasks import Task, StockReport
 
 # list of valid roles
 ROLES = ("volunteer", "staff", "admin")
+
+# Why stock can be changed by hand (FR-10). Only "count correction" can add stock;
+# every other reason takes stock away.
+ADJUSTMENT_REASONS = ("damaged", "expired", "missing", "discarded", "count correction")
+
+# Filters search_inventory understands (FR-11)
+SEARCH_FILTERS = ("text", "exclude_allergens", "suitable_for", "in_stock", "flag")
 
 # Default data file, found relative to the project rather than wherever the app is launched from
 DEFAULT_DATA_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -42,7 +50,8 @@ class ScheduleManager:
         self.donations = []
         self.tasks = []
         self.stock_reports = []
-        
+        self.stock_adjustments = []
+
         self.next_report_id = 1
         self.next_volunteer_id = 1
         self.next_staff_id = 1
@@ -108,6 +117,7 @@ class ScheduleManager:
                 r.get("preferences", []),
                 r.get("quantity", 0),
                 r.get("expiry"),
+                r.get("condition", "good"),
             )
             for r in records
         ]
@@ -175,6 +185,7 @@ class ScheduleManager:
         except ValueError as e:
             raise ValueError(f"Data file '{self.data_path}' has an invalid record: {e}")
         self.donations = list(data.get("donations", []))
+        self.stock_adjustments = list(data.get("stock_adjustments", []))
 
         self.next_volunteer_id = data.get("next_volunteer_id", 1)
         self.next_staff_id = data.get("next_staff_id", 1)
@@ -209,6 +220,7 @@ class ScheduleManager:
             "stock_reports": [r.to_dict() for r in self.stock_reports],
         
             "donations": self.donations,
+            "stock_adjustments": self.stock_adjustments,
             "next_volunteer_id": self.next_volunteer_id,
             "next_staff_id": self.next_staff_id,
             "next_admin_id": self.next_admin_id,
@@ -388,7 +400,8 @@ class ScheduleManager:
                     and item.allergens == allergens
                     and item.may_contain == may_contain
                     and item.preferences == preferences
-                    and item.expiry == expiry):
+                    and item.expiry == expiry
+                    and item.condition == "good"):
                 match = item
                 break
 
@@ -413,7 +426,7 @@ class ScheduleManager:
     def safe_items_for(self, client):
         """In-stock, unexpired items that are safe for this client."""
         return [item for item in self.storeroom
-                if item.quantity > 0 and not item.is_expired() and client.can_have(item)]
+                if item.quantity > 0 and item.is_usable() and client.can_have(item)]
 
     # ---------- Hampers (UC-01) ----------
 
@@ -466,6 +479,8 @@ class ScheduleManager:
                              f"not {', '.join(sorted(missing))}")
         if item.is_expired():
             raise ValueError(f"{item.name} is past its expiry date")
+        if item.condition != "good":
+            raise ValueError(f"{item.name} is marked as {item.condition} and can't be packed")
         available = item.quantity - hamper.quantity_of(item.id)
         if quantity > available:
             raise ValueError(f"Only {max(available, 0)} x {item.name} available")
@@ -646,12 +661,57 @@ class ScheduleManager:
         return (f"Pickup #{pickup.id}  {pickup.scheduled_at.strftime('%H:%M')}  "
                 f"Client #{pickup.client_id} ({first_name})  Hamper #{pickup.hamper_id}  {status}")
 
-    # ---------- Not yet implemented (planned for the final submission) ----------
+    # ---------- User roles (FR-02) ----------
+
+    def all_users(self):
+        """Every account, for the admin's user list. Each User knows its own role."""
+        self.require_permission("manage_users")
+        return self.admins + self.staff + self.volunteers
 
     def assign_role(self, user_id, current_role, new_role):
-        # TODO [FR-02]: Require manage_users; validate the new role and persist the move.
-        # TODO: Handle IDs that currently overlap across the three role collections.
-        raise NotImplementedError
+        """Moves a user to a different role (FR-02). Returns the updated User.
+
+        IDs are only unique within a role, so the user is found by id and current role.
+        They get a new id in their new role, keep their name, username and password,
+        and unfinished volunteer tasks are unassigned so staff can give them to someone else.
+        """
+        self.require_permission("manage_users")
+        if current_role not in ROLES or new_role not in ROLES:
+            raise ValueError(f"Role must be one of {ROLES}")
+        if new_role == current_role:
+            raise ValueError(f"This user is already {current_role}")
+        old_list = self._users_for_role(current_role)
+        user = next((u for u in old_list if u.id == user_id), None)
+        if user is None:
+            raise ValueError(f"No {current_role} with number {user_id}")
+        if user is self.current_user:
+            raise ValueError("You can't change your own role")
+        if current_role == "admin" and len(self.admins) == 1:
+            raise ValueError("There must always be at least one admin")
+        new_list = self._users_for_role(new_role)
+        if any(u.username == user.username for u in new_list):
+            raise ValueError(f"A {new_role} with username '{user.username}' already exists")
+
+        if new_role == "volunteer":
+            new_id = self.next_volunteer_id
+            self.next_volunteer_id += 1
+        elif new_role == "staff":
+            new_id = self.next_staff_id
+            self.next_staff_id += 1
+        else:
+            new_id = self.next_admin_id
+            self.next_admin_id += 1
+
+        if current_role == "volunteer":
+            for task in self.tasks:
+                if task.assigned_to == user.username and not task.is_done():
+                    task.assigned_to = ""
+        old_list.remove(user)
+        user.id = new_id
+        user.role = new_role
+        new_list.append(user)
+        self._save_data()
+        return user
 
     # Fields staff are allowed to change with update_client
     EDITABLE_CLIENT_FIELDS = ("name", "phone", "email", "contact_method", "allergies",
@@ -690,13 +750,114 @@ class ScheduleManager:
         self._save_data()
         return client
 
-    def search_inventory(self, filters):
-        # TODO [FR-11..12]: Search/filter items and flag unsafe/near-expiry batches.
-        raise NotImplementedError
+    # ---------- Inventory search, flags and adjustments (FR-10 to FR-12) ----------
 
-    def adjust_stock(self, item_id, quantity_change, reason):
-        # TODO [FR-10, NFR-12]: Record damaged/discarded stock with a reason.
-        raise NotImplementedError
+    def search_inventory(self, filters=None):
+        """Returns stock items matching every filter given, in item number order (FR-11).
+
+        filters is a dict that can include:
+          text              part of the item name (any case)
+          exclude_allergens items that contain or may contain any of these are left out
+          suitable_for      items must have all these dietary tags, e.g. ["vegan"]
+          in_stock          True to show only items with a quantity above 0
+          flag              only items with this flag, e.g. "near expiry" (see FLAGS)
+        """
+        self.require_permission("manage_inventory", "pack_hamper", "report_stock")
+        filters = dict(filters or {})
+        unknown = set(filters) - set(SEARCH_FILTERS)
+        if unknown:
+            raise ValueError(f"Unknown search filter(s): {', '.join(sorted(unknown))}")
+
+        text = str(filters.get("text") or "").strip().lower()
+        exclude = clean_allergens(filters.get("exclude_allergens") or [])
+        suitable_for = {p.strip().lower() for p in filters.get("suitable_for") or [] if p.strip()}
+        in_stock = bool(filters.get("in_stock"))
+        flag = filters.get("flag")
+        if flag is not None and flag not in FLAGS:
+            raise ValueError(f"Flag must be one of: {', '.join(FLAGS)}")
+
+        results = []
+        for item in self.storeroom:
+            if text and text not in item.name.lower():
+                continue
+            if exclude & (item.allergens | item.may_contain):
+                continue
+            if not suitable_for.issubset(item.preferences):
+                continue
+            if in_stock and item.quantity == 0:
+                continue
+            if flag is not None and flag not in item.flags():
+                continue
+            results.append(item)
+        return sorted(results, key=lambda i: i.id)
+
+    def flagged_items(self):
+        """Every item with at least one warning flag, for the stock screen (FR-12)."""
+        self.require_permission("manage_inventory", "pack_hamper", "report_stock")
+        return [item for item in self.storeroom if item.flags()]
+
+    def set_item_condition(self, item_id, condition):
+        """Marks a whole batch as good, damaged or contaminated (FR-12, FR-13).
+
+        Damaged and contaminated stock stays on record but can't be packed.
+        """
+        self.require_permission("manage_inventory")
+        item = self._get_item(item_id)
+        condition = str(condition).strip().lower()
+        if condition not in CONDITIONS:
+            raise ValueError(f"Condition must be one of: {', '.join(CONDITIONS)}")
+        item.condition = condition
+        self._save_data()
+        return item
+
+    def adjust_stock(self, item_id, quantity_change, reason, note="", report_id=None):
+        """Changes a stock quantity by hand and records why (FR-10, NFR-12).
+
+        quantity_change is negative to remove stock (damaged, expired, missing, discarded)
+        and can only be positive for a "count correction". Stock can never go below zero.
+        If report_id is given, that volunteer stock report is marked as dealt with.
+        """
+        self.require_permission("manage_inventory")
+        item = self._get_item(item_id)
+        if reason not in ADJUSTMENT_REASONS:
+            raise ValueError(f"Reason must be one of: {', '.join(ADJUSTMENT_REASONS)}")
+        if isinstance(quantity_change, bool) or not isinstance(quantity_change, int):
+            raise ValueError("The change must be a whole number")
+        if quantity_change == 0:
+            raise ValueError("The change can't be 0")
+        if quantity_change > 0 and reason != "count correction":
+            raise ValueError(f"Stock can only be added back with a count correction, not '{reason}'")
+        if item.quantity + quantity_change < 0:
+            raise ValueError(f"There are only {item.quantity} x {item.name} in stock")
+        note = str(note or "").strip()
+        if len(note) > 300:
+            raise ValueError("Note must be 300 characters or fewer")
+
+        report = None
+        if report_id is not None:
+            report = next((r for r in self.stock_reports if r.id == report_id), None)
+            if report is None:
+                raise ValueError(f"No stock report with number {report_id}")
+            if report.resolved:
+                raise ValueError(f"Stock report #{report_id} has already been dealt with")
+            if report.item_id != item.id:
+                raise ValueError(f"Stock report #{report_id} is about a different item")
+
+        item.quantity += quantity_change
+        if report:
+            report.resolved = True
+        self.stock_adjustments.append({
+            "item_id": item.id,
+            "name": item.name,
+            "change": quantity_change,
+            "reason": reason,
+            "note": note,
+            "report_id": report_id,
+            "date": date.today().isoformat(),
+            "recorded_by": self.current_user.username,
+        })
+        self._save_data()
+        return item
 
 
     # ---Volunteer tasks (F-05)---

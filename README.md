@@ -58,6 +58,9 @@ python -m pytest
 | Volunteer tasks | Staff create tasks, assign them to a volunteer and reassign them. Volunteers see their own tasks (unfinished first) and update the status and a progress note. | F-05, FR-20 to FR-24 |
 | Stock problem reports | Volunteers report damaged, expired or missing stock. Reports don't change the stock count; staff see them under "Reported stock problems". | FR-25 |
 | Operational reports | Admins generate current-stock, expiry, shortage (under 10 left), donation and hamper-distribution reports. Other roles are refused. | F-07, FR-28 to FR-32 |
+| Stock search and flags | Search stock by name, allergens to leave out, dietary tags and "in stock only". Items are flagged as expired, near expiry (within 7 days), damaged, contaminated or out of stock. | FR-11, FR-12 |
+| Stock adjustments | Staff remove damaged, expired, missing or discarded stock (or correct a count) with a reason, which is logged. Stock can never go below zero. Adjusting stock can close a volunteer's stock report. Damaged or contaminated batches can't be packed. | FR-10, FR-13, NFR-12 |
+| Changing roles | Admins move a user to a different role. The user keeps their username and password; an admin can't change their own role and the last admin can't be removed. | FR-02 |
 
 ## App
 ### clients.py
@@ -170,6 +173,9 @@ client_allergies is a dict like {"peanuts": "severe", "dairy": "mild"}.
 │   ├── functional_test.py         End-to-end, boundary and MC/DC tests through the menus
 │   ├── hamper_item_test.py        HamperItem lines, quantities and recorded substitutions
 │   ├── hamper_test.py             Permissions, hampers, donations, privacy, boundaries
+│   ├── inventory_test.py          Stock search, flags, condition and stock adjustments
+│   ├── menu_test.py               End-to-end tests for search, adjustments, roles and reports
+│   ├── role_test.py               Changing a user's role
 │   ├── client_test.py             Household, contact method, editing, private notes, privacy
 │   ├── password_test.py           Password hashing and login
 │   ├── pickup_test.py             Booking, collection, privacy and boundary tests for pickups
@@ -182,11 +188,9 @@ client_allergies is a dict like {"peanuts": "severe", "dairy": "mild"}.
 └── requirements.txt
 ```
 
-## Known issues and not yet implemented
+## Known issues and limitations
 - The graphical interface uses Streamlit instead of the Tkinter GUI planned in Deliverable 1,
   and data is stored in JSON rather than SQLite. The command-line interface is still included.
-- Changing user roles, searching stock and recording damaged stock are not built yet. Stock
-  problems volunteers report can be viewed but not yet resolved.
 - Only one copy of the app should run at a time. Two copies would overwrite each other's saves.
 - If the app is closed while a hamper is being packed, that draft hamper stays in the data
   file. It doesn't affect stock.

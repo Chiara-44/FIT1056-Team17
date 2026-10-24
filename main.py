@@ -1,8 +1,8 @@
 # filename: main.py
 # group: Team 17
-# names: Chiara
+# names: Chiara, Harry
 # created: 18/09/26
-# last modified: 16/10/26
+# last modified: 24/10/26
 #
 # Command-line interface for FoodShare Tracker.
 # Every screen only offers what the logged-in role is allowed to do, and the
@@ -11,8 +11,8 @@
 from datetime import date
 from getpass import getpass
 
-from app.schedule import ScheduleManager, ROLES, DEFAULT_DATA_PATH
-from app.storeroom import ALLERGENS, PREFERENCES, parse_expiry
+from app.schedule import ScheduleManager, ROLES, DEFAULT_DATA_PATH, ADJUSTMENT_REASONS
+from app.storeroom import ALLERGENS, PREFERENCES, CONDITIONS, FLAGS, parse_expiry
 from app.clients import CONTACT_METHODS, ACCESSIBILITY_NEEDS, SEVERITIES
 from app.tasks import TASK_STATUSES, STOCK_PROBLEMS
 
@@ -94,8 +94,13 @@ def show_stock(manager):
     if not manager.storeroom:
         print("No stock recorded yet.")
         return
+    print_items(manager.storeroom)
+
+
+def print_items(items):
+    """Prints stock items in a table, with any warning flags at the end (FR-12)."""
     print(f"{'No.':<4} {'Item':<22} {'Qty':>4}  {'Expiry':<11} Contains / may contain")
-    for item in manager.storeroom:
+    for item in items:
         expiry = item.expiry.isoformat() if item.expiry else "-"
         if item.is_expired():
             expiry += " EXPIRED"
@@ -103,7 +108,37 @@ def show_stock(manager):
         may = ", ".join(sorted(item.may_contain))
         if may:
             contains += f" / may contain {may}"
-        print(f"{item.id:<4} {item.name:<22} {item.quantity:>4}  {expiry:<11} {contains}")
+        line = f"{item.id:<4} {item.name:<22} {item.quantity:>4}  {expiry:<11} {contains}"
+        flags = [f for f in item.flags() if f != "expired"]  # expired is already shown
+        if flags:
+            line += f"  ** {', '.join(flags).upper()} **"
+        print(line)
+
+
+def search_stock_screen(manager):
+    """FR-11, FR-12: search and filter stock, or list items that need attention."""
+    print("\n--- Search stock ---")
+    print("Press Enter to skip any question.")
+    filters = {}
+    text = ask("Part of the item name: ")
+    if text:
+        filters["text"] = text
+    exclude = ask_choices(sorted(ALLERGENS), "Leave out items with these allergens (numbers): ",
+                          many=True)
+    if exclude:
+        filters["exclude_allergens"] = exclude
+    suitable = ask_choices(sorted(PREFERENCES), "Must be suitable for (numbers): ", many=True)
+    if suitable:
+        filters["suitable_for"] = suitable
+    if ask("Only items in stock? (y/n): ").lower() == "y":
+        filters["in_stock"] = True
+    flag = ask_choices(FLAGS, "Only items flagged as (number): ", many=True)
+    if flag:
+        filters["flag"] = flag[0]
+    results = manager.search_inventory(filters)
+    print(f"\n{len(results)} item(s) found.")
+    if results:
+        print_items(results)
 
 
 def record_donation_screen(manager):
@@ -555,6 +590,67 @@ def report_stock_screen(manager):
     print("Thanks, staff will check it. The stock count hasn't been changed yet.")
 
 
+def adjust_stock_screen(manager):
+    """FR-10, FR-12: remove damaged/discarded stock, correct a count or mark a batch's condition."""
+    show_stock(manager)
+    print("\n--- Adjust stock ---")
+    item_id = ask_int("Item number (blank to go back): ", allow_blank=True)
+    if item_id is None:
+        return
+    item = manager.find_item(item_id)
+    if item is None:
+        raise ValueError(f"No stock item with number {item_id}")
+    action = ask_choices(("Change the quantity", "Mark the batch's condition"), "Choose: ")
+    if action == "Mark the batch's condition":
+        condition = ask_choices(CONDITIONS, "Condition: ")
+        manager.set_item_condition(item.id, condition)
+        print(f"{item.name} is now marked as {condition}.")
+        return
+    print("Why is the stock changing?")
+    reason = ask_choices(ADJUSTMENT_REASONS, "Choose: ")
+    amount = ask_int("How many: ")
+    change = amount if reason == "count correction" else -abs(amount)
+    if reason == "count correction" and ask("Add or remove? (a/r): ").lower() == "r":
+        change = -abs(amount)
+    note = ask("Details (optional): ")
+    report_id = ask_int("Stock report number this deals with (blank for none): ", allow_blank=True)
+    manager.adjust_stock(item.id, change, reason, note, report_id)
+    print(f"Done. {item.name} now has {item.quantity} in stock.")
+
+
+def change_role_screen(manager):
+    """FR-02: an admin moves a user to a different role."""
+    print("\n--- Change a user's role ---")
+    users = manager.all_users()
+    labels = [f"{u.name} ({u.username}) - {u.role} #{u.id}" for u in users]
+    chosen = labels.index(ask_choices(labels, "Which user (number): "))
+    user = users[chosen]
+    new_role = ask_choices([r for r in ROLES if r != user.role], "New role: ")
+    manager.assign_role(user.id, user.role, new_role)
+    print(f"{user.name} is now {new_role}. They log in with the same username and password.")
+
+
+REPORTS = (("Current stock", "stock"), ("Expired or expiring today", "expiry"),
+           ("Shortages (under 10 left)", "shortages"), ("Donations", "donations"),
+           ("Hamper distribution", "hampers"))
+
+
+def reports_screen(manager):
+    """FR-28 to FR-32: operational reports for admins."""
+    print("\n--- Operational reports ---")
+    label = ask_choices([r[0] for r in REPORTS], "Which report: ")
+    report = manager.generate_report(dict(REPORTS)[label])
+    print(f"\n{label}")
+    if isinstance(report, dict):
+        print(f"  Completed hampers: {report['total_completed']}")
+        print(f"  Draft hampers:     {report['total_drafts']}")
+        return
+    if not report:
+        print("  Nothing to show.")
+    for row in report:
+        print("  " + ", ".join(f"{key}: {value}" for key, value in row.items()))
+
+
 def stock_reports_screen(manager):
     """Staff view of stock problems volunteers have reported."""
     print("\n--- Reported stock problems ---")
@@ -566,6 +662,8 @@ def stock_reports_screen(manager):
         name = item.name if item else f"item #{r.item_id}"
         line = f"#{r.id:<3} {r.reported_on}  {r.quantity} x {name} {r.problem} (by {r.reported_by})"
         print(line + (f"\n      {r.note}" if r.note else ""))
+    if reports:
+        print("\nUse 'Adjust stock' to remove the stock and close a report.")
 
 # Each menu option: (key, label, permission needed (None = any logged-in user), function)
 MENU = [
@@ -581,6 +679,10 @@ MENU = [
     ("10", "Volunteer tasks", "manage_tasks", manage_tasks_screen),
     ("11", "Report a stock problem", "report_stock", report_stock_screen),
     ("12", "Reported stock problems", "manage_inventory", stock_reports_screen),
+    ("13", "Search stock", ("manage_inventory", "pack_hamper", "report_stock"), search_stock_screen),
+    ("14", "Adjust stock (damaged, discarded, corrections)", "manage_inventory", adjust_stock_screen),
+    ("15", "Change a user's role", "manage_users", change_role_screen),
+    ("16", "Operational reports", "run_reports", reports_screen),
 ]
 
 

@@ -9,6 +9,7 @@ def show_admin_page(manager):
     tabs = []
     if manager.can("manage_users"):
         tabs.append("Create account")
+        tabs.append("Change a role")
     if manager.can("run_reports"):
         tabs.append("Reports")
     if not tabs:
@@ -29,6 +30,9 @@ def show_admin_page(manager):
                 if result:
                     st.write(f"Created {result.role} account for {result.username}.")
         i += 1
+        with rendered_tabs[i]:
+            show_change_role(manager)
+        i += 1
     if manager.can("run_reports"):
         with rendered_tabs[i]:
             report_type = st.selectbox("Report", ["stock", "expiry", "shortages", "donations", "hampers"])
@@ -42,3 +46,23 @@ def show_admin_page(manager):
                             st.info("This report has no records.")
                     else:
                         st.json(report)
+
+
+def show_change_role(manager):
+    """FR-02: an admin moves a user to a different role."""
+    users = run_action(manager.all_users) or []
+    if not users:
+        st.info("No user accounts found.")
+        return
+    st.dataframe([{"Name": u.name, "Username": u.username, "Role": u.role, "Number": u.id}
+                  for u in users], use_container_width=True, hide_index=True)
+    with st.form("change_role_form"):
+        user = st.selectbox("User", users,
+                            format_func=lambda u: f"{u.name} ({u.username}) - {u.role} #{u.id}")
+        new_role = st.selectbox("New role", list(ROLES))
+        submitted = st.form_submit_button("Change role", type="primary")
+    if submitted:
+        result = run_action(lambda: manager.assign_role(user.id, user.role, new_role))
+        if result:
+            st.success(f"{result.name} is now {result.role}. "
+                       "They log in with the same username and password.")
