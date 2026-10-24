@@ -7,7 +7,8 @@
 
 import json
 import os
-from datetime import date, datetime
+import shutil
+from datetime import date, datetime, timedelta
 
 from app.users import User, hash_password, PERMISSIONS
 from app.clients import Client
@@ -24,6 +25,12 @@ ROLES = ("volunteer", "staff", "admin")
 # Why stock can be changed by hand (FR-10). Only "count correction" can add stock;
 # every other reason takes stock away.
 ADJUSTMENT_REASONS = ("damaged", "expired", "missing", "discarded", "count correction")
+
+# Users are logged out after this many minutes without activity (NFR-02, NFR-15)
+SESSION_TIMEOUT_MINUTES = 10
+
+# How many daily backups of the data file to keep (NFR-11)
+BACKUPS_TO_KEEP = 14
 
 # Filters search_inventory understands (FR-11)
 SEARCH_FILTERS = ("text", "exclude_allergens", "suitable_for", "in_stock", "flag")
@@ -51,6 +58,9 @@ class ScheduleManager:
         self.tasks = []
         self.stock_reports = []
         self.stock_adjustments = []
+        self.audit_log = []
+        self.last_activity = None
+        self._now = datetime.now  # replaced in tests to simulate time passing
 
         self.next_report_id = 1
         self.next_volunteer_id = 1
@@ -186,6 +196,7 @@ class ScheduleManager:
             raise ValueError(f"Data file '{self.data_path}' has an invalid record: {e}")
         self.donations = list(data.get("donations", []))
         self.stock_adjustments = list(data.get("stock_adjustments", []))
+        self.audit_log = list(data.get("audit_log", []))
 
         self.next_volunteer_id = data.get("next_volunteer_id", 1)
         self.next_staff_id = data.get("next_staff_id", 1)
@@ -221,6 +232,7 @@ class ScheduleManager:
         
             "donations": self.donations,
             "stock_adjustments": self.stock_adjustments,
+            "audit_log": self.audit_log,
             "next_volunteer_id": self.next_volunteer_id,
             "next_staff_id": self.next_staff_id,
             "next_admin_id": self.next_admin_id,
@@ -237,7 +249,47 @@ class ScheduleManager:
         temp_path = self.data_path + ".tmp"
         with open(temp_path, "w") as f:
             json.dump(data_to_save, f, indent=4)
+        self._backup_today()
         os.replace(temp_path, self.data_path)
+
+    def _backup_today(self):
+        """Copies the current data file into a dated backup once per day (NFR-11).
+
+        Only the newest BACKUPS_TO_KEEP backups are kept. A failed backup never
+        stops the save itself.
+        """
+        if not os.path.exists(self.data_path):
+            return
+        folder = os.path.join(os.path.dirname(os.path.abspath(self.data_path)), "backups")
+        name = os.path.splitext(os.path.basename(self.data_path))[0]
+        target = os.path.join(folder, f"{name}-{self._now().date().isoformat()}.json")
+        try:
+            if not os.path.exists(target):
+                os.makedirs(folder, exist_ok=True)
+                shutil.copy2(self.data_path, target)
+            backups = sorted(f for f in os.listdir(folder)
+                             if f.startswith(name + "-") and f.endswith(".json"))
+            for old in backups[:-BACKUPS_TO_KEEP]:
+                os.remove(os.path.join(folder, old))
+        except OSError:
+            pass
+
+    def _audit(self, action, details=""):
+        """Records who did what and when, for accountability (Section 8.4)."""
+        user = self.current_user
+        self.audit_log.append({
+            "when": self._now().isoformat(timespec="seconds"),
+            "user": user.username if user else "",
+            "role": user.role if user else "",
+            "action": action,
+            "details": details,
+        })
+
+    def audit_entries(self, limit=None):
+        """The audit log, newest first. Administrators only."""
+        self.require_permission("manage_users")
+        entries = list(reversed(self.audit_log))
+        return entries[:limit] if limit else entries
 
     # ---------- Login and permissions ----------
 
@@ -260,11 +312,19 @@ class ScheduleManager:
         for user in users:
             if user.username == username and user.check_password(password):
                 self.current_user = user
+                self.last_activity = self._now()
                 return user
         return None
 
     def logout(self):
         self.current_user = None
+        self.last_activity = None
+
+    def session_expired(self):
+        """True if the logged-in user has been inactive for too long (shared computers)."""
+        if self.current_user is None or self.last_activity is None:
+            return False
+        return self._now() - self.last_activity > timedelta(minutes=SESSION_TIMEOUT_MINUTES)
 
     def can(self, permission):
         """True if the logged-in user's role includes this permission."""
@@ -280,6 +340,11 @@ class ScheduleManager:
         """
         if self.current_user is None:
             raise PermissionError("Please log in first.")
+        if self.session_expired():
+            self.logout()
+            raise PermissionError(f"You were logged out after {SESSION_TIMEOUT_MINUTES} minutes "
+                                  "without activity. Please log in again.")
+        self.last_activity = self._now()
         if not any(self.can(p) for p in permissions):
             raise PermissionError(f"Your role ({self.current_user.role}) can't do this.")
 
@@ -315,6 +380,7 @@ class ScheduleManager:
 
         user = User(new_id, name.strip(), username.strip(), hash_password(password), role)
         self._users_for_role(role).append(user)
+        self._audit("add user", f"{role} account '{user.username}'")
         self._save_data()
         return user
 
@@ -336,6 +402,7 @@ class ScheduleManager:
                         household_size, **details)
         self.clients.append(client)
         self.next_client_id += 1
+        self._audit("register client", f"client #{client.id}")
         self._save_data()
         return client
 
@@ -420,6 +487,7 @@ class ScheduleManager:
             "date": date.today().isoformat(),
             "recorded_by": self.current_user.username,
         })
+        self._audit("record donation", f"{quantity} x {item.name} (item #{item.id})")
         self._save_data()
         return item
 
@@ -558,6 +626,7 @@ class ScheduleManager:
         for item_id, quantity in hamper.items.items():
             self._get_item(item_id).quantity -= quantity
         hamper.status = COMPLETED
+        self._audit("complete hamper", f"hamper #{hamper.id} for client #{hamper.client_id}")
         self._save_data()
         return hamper
 
@@ -625,6 +694,7 @@ class ScheduleManager:
         self.require_permission("manage_pickups")
         pickup = self._get_pickup(pickup_id)
         pickup.cancel()
+        self._audit("cancel pickup", f"pickup #{pickup.id}")
         self._save_data()
         return pickup
 
@@ -636,6 +706,7 @@ class ScheduleManager:
         self.require_permission("record_pickup")
         pickup = self._get_pickup(pickup_id)
         pickup.mark_collected(self.current_user.username, when)
+        self._audit("record collection", f"pickup #{pickup.id}")
         self._save_data()
         return pickup
 
@@ -710,6 +781,7 @@ class ScheduleManager:
         user.id = new_id
         user.role = new_role
         new_list.append(user)
+        self._audit("change role", f"'{user.username}' from {current_role} to {new_role}")
         self._save_data()
         return user
 
@@ -739,6 +811,7 @@ class ScheduleManager:
                          food_notes=data["food_notes"], language=data["language"],
                          private_notes=client.private_notes)
         self.clients[self.clients.index(client)] = updated
+        self._audit("update client", f"client #{client.id}: {', '.join(sorted(changes))}")
         self._save_data()
         return updated
 
@@ -747,6 +820,7 @@ class ScheduleManager:
         self.require_permission("manage_clients")
         client = self._get_client(client_id)
         client.add_private_note(text, self.current_user.username)
+        self._audit("add private note", f"client #{client.id}")
         self._save_data()
         return client
 
@@ -807,6 +881,7 @@ class ScheduleManager:
         if condition not in CONDITIONS:
             raise ValueError(f"Condition must be one of: {', '.join(CONDITIONS)}")
         item.condition = condition
+        self._audit("mark condition", f"item #{item.id} {condition}")
         self._save_data()
         return item
 
@@ -856,6 +931,7 @@ class ScheduleManager:
             "date": date.today().isoformat(),
             "recorded_by": self.current_user.username,
         })
+        self._audit("adjust stock", f"item #{item.id} {quantity_change:+d} ({reason})")
         self._save_data()
         return item
 

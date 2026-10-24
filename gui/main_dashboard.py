@@ -64,6 +64,11 @@ def launch():
         show_first_admin_setup(manager)
         return
 
+    if manager.session_expired():
+        manager.logout()
+        st.session_state.logged_in = False
+        st.warning("You were logged out after 10 minutes without activity. Please log in again.")
+
     if not st.session_state.get("logged_in") or manager.current_user is None:
         show_login(manager)
         return

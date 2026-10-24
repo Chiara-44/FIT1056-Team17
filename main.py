@@ -651,6 +651,16 @@ def reports_screen(manager):
         print("  " + ", ".join(f"{key}: {value}" for key, value in row.items()))
 
 
+def audit_log_screen(manager):
+    """Admins review who did what and when (accountability, Section 8.4)."""
+    print("\n--- Audit log (newest first) ---")
+    entries = manager.audit_entries(limit=30)
+    if not entries:
+        print("Nothing recorded yet.")
+    for e in entries:
+        print(f"{e['when']}  {e['user'] or '-':<10} {e['action']:<18} {e['details']}")
+
+
 def stock_reports_screen(manager):
     """Staff view of stock problems volunteers have reported."""
     print("\n--- Reported stock problems ---")
@@ -683,6 +693,7 @@ MENU = [
     ("14", "Adjust stock (damaged, discarded, corrections)", "manage_inventory", adjust_stock_screen),
     ("15", "Change a user's role", "manage_users", change_role_screen),
     ("16", "Operational reports", "run_reports", reports_screen),
+    ("17", "Audit log", "manage_users", audit_log_screen),
 ]
 
 
@@ -708,6 +719,10 @@ def main_menu(manager):
         print("[l] Log out   [q] Quit")
         choice = ask("Choose: ").lower()
 
+        if manager.session_expired():
+            manager.logout()
+            print("You were logged out after 10 minutes without activity. Please log in again.")
+            return True
         if choice == "l":
             manager.logout()
             print("Logged out.")
@@ -724,6 +739,8 @@ def main_menu(manager):
             match[3](manager)
         except (ValueError, PermissionError) as e:
             print(f"Can't do that: {e}")
+        if manager.current_user is None:   # logged out by the inactivity timeout
+            return True
         pause()
 
 

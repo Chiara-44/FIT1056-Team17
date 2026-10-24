@@ -10,6 +10,7 @@ def show_admin_page(manager):
     if manager.can("manage_users"):
         tabs.append("Create account")
         tabs.append("Change a role")
+        tabs.append("Audit log")
     if manager.can("run_reports"):
         tabs.append("Reports")
     if not tabs:
@@ -32,6 +33,13 @@ def show_admin_page(manager):
         i += 1
         with rendered_tabs[i]:
             show_change_role(manager)
+        i += 1
+        with rendered_tabs[i]:
+            entries = run_action(lambda: manager.audit_entries(limit=200))
+            if entries:
+                st.dataframe(entries, use_container_width=True, hide_index=True)
+            elif entries is not None:
+                st.info("Nothing recorded yet.")
         i += 1
     if manager.can("run_reports"):
         with rendered_tabs[i]:

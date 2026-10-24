@@ -61,6 +61,9 @@ python -m pytest
 | Stock search and flags | Search stock by name, allergens to leave out, dietary tags and "in stock only". Items are flagged as expired, near expiry (within 7 days), damaged, contaminated or out of stock. | FR-11, FR-12 |
 | Stock adjustments | Staff remove damaged, expired, missing or discarded stock (or correct a count) with a reason, which is logged. Stock can never go below zero. Adjusting stock can close a volunteer's stock report. Damaged or contaminated batches can't be packed. | FR-10, FR-13, NFR-12 |
 | Changing roles | Admins move a user to a different role. The user keeps their username and password; an admin can't change their own role and the last admin can't be removed. | FR-02 |
+| Inactivity logout | Users are logged out after 10 minutes without activity, in both interfaces, so a shared computer isn't left logged in. | NFR-02, NFR-15 |
+| Daily backups | The first save each day copies the data file to `data/backups/` (the newest 14 are kept). | NFR-11 |
+| Audit log | Donations, stock adjustments, completed hampers, client changes, private notes, pickups and role changes are recorded with who did them and when. Admins can view the log. | Accountability |
 
 ## App
 ### clients.py
@@ -176,6 +179,7 @@ client_allergies is a dict like {"peanuts": "severe", "dairy": "mild"}.
 │   ├── inventory_test.py          Stock search, flags, condition and stock adjustments
 │   ├── menu_test.py               End-to-end tests for search, adjustments, roles and reports
 │   ├── role_test.py               Changing a user's role
+│   ├── security_test.py           Inactivity logout, daily backups and the audit log
 │   ├── client_test.py             Household, contact method, editing, private notes, privacy
 │   ├── password_test.py           Password hashing and login
 │   ├── pickup_test.py             Booking, collection, privacy and boundary tests for pickups
