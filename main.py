@@ -2,7 +2,7 @@
 # group: Team 17
 # names: Chiara, Harry
 # created: 18/09/26
-# last modified: 24/10/26
+# last modified: 25/10/26
 #
 # Command-line interface for FoodShare Tracker.
 # Every screen only offers what the logged-in role is allowed to do, and the
@@ -12,7 +12,7 @@ from datetime import date
 from getpass import getpass
 
 from app.schedule import ScheduleManager, ROLES, DEFAULT_DATA_PATH, ADJUSTMENT_REASONS
-from app.storeroom import ALLERGENS, PREFERENCES, CONDITIONS, FLAGS, parse_expiry
+from app.storeroom import ALLERGENS, PREFERENCES, CONDITIONS, FLAGS, parse_expiry, diet_conflicts
 from app.clients import CONTACT_METHODS, ACCESSIBILITY_NEEDS, SEVERITIES
 from app.tasks import TASK_STATUSES, STOCK_PROBLEMS
 
@@ -151,10 +151,15 @@ def record_donation_screen(manager):
     print("May contain traces of:")
     may_contain = ask_choices(sorted(ALLERGENS), "Choose (numbers separated by spaces, Enter for none): ",
                               many=True)
-    print("Suitable for:")
-    prefs = ask_choices(sorted(PREFERENCES), "Choose (numbers separated by spaces, Enter for none): ",
-                        many=True)
-    expiry = ask_expiry("Expiry date YYYY-MM-DD (blank if none): ")
+    while True:
+        print("Suitable for:")
+        prefs = ask_choices(sorted(PREFERENCES), "Choose (numbers separated by spaces, Enter for none): ",
+                            many=True)
+        conflicts = diet_conflicts(allergens, prefs)
+        if not conflicts:
+            break
+        print(f"  {name} {'; '.join(conflicts)}. Please choose again.")
+    expiry = ask_expiry("Expiry date DD/MM/YYYY or YYYY-MM-DD (blank if none): ")
     donor = ask("Donor name (optional): ")
     item = manager.record_donation(name, allergens, may_contain, prefs, quantity, expiry, donor)
     print(f"Thanks! Recorded. {item.name} now has {item.quantity} in stock (item #{item.id}).")
@@ -367,16 +372,26 @@ def prepare_hamper_screen(manager):
         print("No client with that number.")
         return
 
-    hamper = manager.create_hamper(client.id)
     print("\n" + client.packing_summary())
 
+    # The warning is confirmed before the draft hamper exists, so backing out here
+    # never leaves an empty draft behind (WF-01).
     severe = client.severe_allergies()
     if severe:
         print("\n!!! SEVERE ALLERGY WARNING !!!")
         print(f"This client has a severe allergy to: {', '.join(severe)}.")
         print("Items that contain these, or may contain traces, will be blocked.")
-        while ask("Type YES to confirm you have read this warning: ").upper() != "YES":
-            print("You need to confirm before packing.")
+        while True:
+            answer = ask("Type YES to confirm you have read this warning, or X to go back: ").lower()
+            if answer in ("y", "yes"):
+                break
+            if answer == "x":
+                print("No hamper was started.")
+                return
+            print("Please type YES to continue or X to go back.")
+
+    hamper = manager.create_hamper(client.id)
+    if severe:
         manager.acknowledge_allergy_warning(hamper.id)
 
     while True:

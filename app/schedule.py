@@ -2,7 +2,7 @@
 # group: Team 17
 # names: Chiara, Harry
 # created: 18/09/26
-# last modified: 24/10/26
+# last modified: 25/10/26
 
 
 import json
@@ -13,7 +13,7 @@ from datetime import date, datetime, timedelta
 from app.users import User, hash_password, PERMISSIONS
 from app.clients import Client
 from app.storeroom import (FoodbankItem, clean_quantity, clean_allergens, parse_expiry,
-                           CONDITIONS, FLAGS)
+                           diet_conflicts, CONDITIONS, FLAGS)
 from app.hampers import Hamper, COMPLETED
 from app.pickups import Pickup, parse_pickup_time
 from app.tasks import Task, StockReport
@@ -459,7 +459,9 @@ class ScheduleManager:
         allergens = clean_allergens(allergens)
         may_contain = clean_allergens(may_contain)
         preferences = {p.strip().lower() for p in preferences if p.strip()}
-
+        conflicts = diet_conflicts(allergens, preferences)
+        if conflicts:
+            raise ValueError(f"{name.strip()} {'; '.join(conflicts)}")
 
         match = None
         for item in self.storeroom:
@@ -541,7 +543,7 @@ class ScheduleManager:
         conflicts = item.allergy_conflicts(client.allergies)
         if conflicts:
             raise ValueError(f"{item.name} is not safe for this client: {', '.join(conflicts)}")
-        missing = client.preferences - item.preferences
+        missing = client.preferences - item.suitable_diets()
         if missing:
             raise ValueError(f"{item.name} doesn't meet this client's needs: "
                              f"not {', '.join(sorted(missing))}")
@@ -856,7 +858,7 @@ class ScheduleManager:
                 continue
             if exclude & (item.allergens | item.may_contain):
                 continue
-            if not suitable_for.issubset(item.preferences):
+            if not suitable_for.issubset(item.suitable_diets()):
                 continue
             if in_stock and item.quantity == 0:
                 continue

@@ -180,6 +180,7 @@ client_allergies is a dict like {"peanuts": "severe", "dairy": "mild"}.
 │   ├── menu_test.py               End-to-end tests for search, adjustments, roles and reports
 │   ├── role_test.py               Changing a user's role
 │   ├── security_test.py           Inactivity logout, daily backups and the audit log
+│   ├── usability_fix_test.py      Fixes from the usability walkthrough (allergy confirmation, diet tags, phone, dates)
 │   ├── client_test.py             Household, contact method, editing, private notes, privacy
 │   ├── password_test.py           Password hashing and login
 │   ├── pickup_test.py             Booking, collection, privacy and boundary tests for pickups

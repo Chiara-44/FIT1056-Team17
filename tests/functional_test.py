@@ -90,7 +90,7 @@ def test_e2e_01_staff_prepares_safe_hamper(tmp_path):
         "q",
     ])
     assert "SEVERE ALLERGY WARNING" in screen
-    assert "You need to confirm before packing." in screen
+    assert "Please type YES to continue or X to go back." in screen
     assert "Peanut butter is not safe for this client: contains peanuts" in screen
     assert "is complete and stock has been updated" in screen
 
@@ -147,7 +147,7 @@ def test_e2e_05_invalid_donation_input_is_asked_again(tmp_path):
         "q",
     ])
     assert "Please type a number from 1 to 9" in screen
-    assert "Expiry date must look like YYYY-MM-DD" in screen
+    assert "Expiry date must look like DD/MM/YYYY or YYYY-MM-DD" in screen
     assert "Muesli now has 4 in stock" in screen
 
 
@@ -226,10 +226,11 @@ def test_expiry_date_boundary(tmp_path, days_from_today, accepted):
 
 
 @pytest.mark.parametrize("text, valid", [
-    ("2026-12-31", True), ("31/12/2026", False), ("2026-02-30", False), ("", True),
+    ("2026-12-31", True), ("31/12/2026", True), ("12-31-2026", False), ("2026-02-30", False),
+    ("", True),
 ])
 def test_expiry_date_format_partitions(tmp_path, text, valid):
-    """EP: ISO date, wrong format, impossible date, blank (no expiry)."""
+    """EP: ISO date, Australian date, wrong format, impossible date, blank (no expiry)."""
     manager = logged_in_manager(tmp_path)
     if valid:
         manager.add_item("Item", [], [], [], 1, text or None)

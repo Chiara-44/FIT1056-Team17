@@ -17,7 +17,7 @@ def make_item(allergens=(), may_contain=(), preferences=("vegan", "vegetarian"))
 
 
 def make_client(allergies=None, preferences=()):
-    return Client(1, "Test client", "0400", allergies or {}, list(preferences))
+    return Client(1, "Test client", "0400 000 000", allergies or {}, list(preferences))
 
 
 # ---- Positive ----
@@ -69,7 +69,7 @@ def test_allergen_names_are_case_insensitive():
 def test_list_format_without_severity_rejected():
     # Allergies must always have a severity, so a plain list gives a clear error
     with pytest.raises(ValueError, match="severity"):
-        Client(1, "Old", "0400", ["peanuts"], [])
+        Client(1, "Old", "0400 000 000", ["peanuts"], [])
 
 
 def test_client_record_without_allergies_loads(tmp_path):

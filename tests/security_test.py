@@ -58,10 +58,10 @@ def test_timeout_boundary(setup, minutes, logged_out):
     clock.advance(minutes=minutes)
     if logged_out:
         with pytest.raises(PermissionError, match="logged out"):
-            m.add_client("Maya Donald", "0400", {}, [])
+            m.add_client("Maya Donald", "0400 000 000", {}, [])
         assert m.current_user is None
     else:
-        m.add_client("Maya Donald", "0400", {}, [])
+        m.add_client("Maya Donald", "0400 000 000", {}, [])
         assert m.current_user is not None
 
 
@@ -70,7 +70,7 @@ def test_each_action_resets_the_timer(setup):
     m.login("angela", "staff123", "staff")
     for _ in range(3):
         clock.advance(minutes=8)
-        m.add_client("Client", "0400", {}, [])   # 24 minutes in total, never 10 idle
+        m.add_client("Client", "0400 000 000", {}, [])   # 24 minutes in total, never 10 idle
     assert m.current_user is not None
 
 
@@ -100,13 +100,13 @@ def test_cli_returns_to_login_after_timeout(setup):
 def test_backup_made_once_per_day(setup):
     m, clock, tmp_path = setup
     m.login("angela", "staff123", "staff")
-    m.add_client("A", "0400", {}, [])
-    m.add_client("B", "0400", {}, [])
+    m.add_client("A", "0400 000 000", {}, [])
+    m.add_client("B", "0400 000 000", {}, [])
     backups = os.listdir(tmp_path / "backups")
     assert backups == ["data-2026-10-24.json"]
     clock.advance(days=1)
     m.last_activity = clock.now   # still working, so no timeout
-    m.add_client("C", "0400", {}, [])
+    m.add_client("C", "0400 000 000", {}, [])
     assert sorted(os.listdir(tmp_path / "backups")) == ["data-2026-10-24.json", "data-2026-10-25.json"]
 
 
@@ -115,7 +115,7 @@ def test_backup_holds_previous_version(setup):
     m.login("angela", "staff123", "staff")
     clock.advance(days=1)
     m.last_activity = clock.now
-    m.add_client("New client", "0400", {}, [])
+    m.add_client("New client", "0400 000 000", {}, [])
     backup = json.loads((tmp_path / "backups" / "data-2026-10-25.json").read_text())
     assert backup["clients"] == []          # taken before today's first change
 
@@ -126,7 +126,7 @@ def test_only_newest_backups_kept(setup):
     for _ in range(BACKUPS_TO_KEEP + 3):
         clock.advance(days=1)
         m.last_activity = clock.now
-        m.add_client("Client", "0400", {}, [])
+        m.add_client("Client", "0400 000 000", {}, [])
     assert len(os.listdir(tmp_path / "backups")) == BACKUPS_TO_KEEP
 
 
@@ -135,7 +135,7 @@ def test_only_newest_backups_kept(setup):
 def test_actions_are_audited_with_user_and_time(setup):
     m, clock, tmp_path = setup
     m.login("angela", "staff123", "staff")
-    client = m.add_client("Maya Donald", "0400", {}, [])
+    client = m.add_client("Maya Donald", "0400 000 000", {}, [])
     m.add_client_note(client.id, "Prefers afternoon pickups")
     item = m.record_donation("Rice", [], [], ["vegan"], 5, None, "Jessi")
     m.adjust_stock(item.id, -1, "damaged")

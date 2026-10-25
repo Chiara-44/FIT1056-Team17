@@ -51,7 +51,7 @@ def staff_manager(tmp_path):
 
 
 def make_client(**kwargs):
-    defaults = dict(id=1, name="Test Client", phone="0400", allergies={}, preferences=[])
+    defaults = dict(id=1, name="Test Client", phone="0400 000 000", allergies={}, preferences=[])
     defaults.update(kwargs)
     return Client(**defaults)
 
@@ -88,18 +88,18 @@ def test_household_partitions(household, valid):
 # ---------- Contact method (FR-08) ----------
 
 def test_default_contact_method_depends_on_phone():
-    assert make_client(phone="0400").contact_method == "sms"
+    assert make_client(phone="0400 000 000").contact_method == "sms"
     assert make_client(phone="").contact_method == "in person"
 
 
 @pytest.mark.parametrize("method, phone, email, valid", [
-    ("sms", "0400", "", True),
-    ("phone call", "0400", "", True),
+    ("sms", "0400 000 000", "", True),
+    ("phone call", "0400 000 000", "", True),
     ("email", "", "a@b.com", True),
     ("in person", "", "", True),
     ("sms", "", "", False),             # no phone number to text
-    ("email", "0400", "not-an-email", False),
-    ("carrier pigeon", "0400", "", False),
+    ("email", "0400 000 000", "not-an-email", False),
+    ("carrier pigeon", "0400 000 000", "", False),
 ])
 def test_contact_method_needs_matching_details(method, phone, email, valid):
     if valid:
@@ -134,7 +134,7 @@ def test_packing_summary_has_food_info_but_no_private_details(tmp_path):
     summary = manager.find_client(1).packing_summary()
     assert "household of 2 (1 adult, 1 infant)" in summary   # infant matters for packing
     assert "prefers fresh vegetables" in summary
-    for private in ("0400", "Donald", "help carrying", "Recently moved", "sms"):
+    for private in ("0400 000 000", "Donald", "help carrying", "Recently moved", "sms"):
         assert private not in summary
 
 
@@ -162,7 +162,7 @@ def test_new_fields_survive_save_and_reload(tmp_path):
 
 def test_old_client_record_still_loads(tmp_path):
     path = write_data(tmp_path, clients=[
-        {"id": 1, "name": "Alex Nguyen", "phone": "0411", "allergies": {"dairy": "mild"},
+        {"id": 1, "name": "Alex Nguyen", "phone": "0411 111 111", "allergies": {"dairy": "mild"},
          "preferences": [], "household_size": 3}])
     client = ScheduleManager(str(path)).find_client(1)
     assert client.household_size == 3 and client.contact_method == "sms"

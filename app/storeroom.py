@@ -2,12 +2,16 @@
 # group: Team 17
 # names: Chiara, Harry
 # created: 29/09/26
-# last modified: 24/10/26
+# last modified: 25/10/26
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 ALLERGENS = {"peanuts", "tree nuts", "dairy", "eggs", "gluten", "soy", "fish", "shellfish", "sesame"}
 PREFERENCES = {"vegan", "vegetarian", "halal", "kosher"}
+
+# Allergens that come from animals, so an item containing them can't suit that diet (WF-02)
+DIET_EXCLUDES = {"vegan": {"dairy", "eggs", "fish", "shellfish"},
+                 "vegetarian": {"fish", "shellfish"}}
 
 # Condition of a stock batch (FR-12, FR-13). Only "good" stock can go into a hamper.
 CONDITIONS = ("good", "damaged", "contaminated")
@@ -30,16 +34,30 @@ def clean_allergens(names):
     return cleaned
 
 
+def diet_conflicts(allergens, preferences):
+    """Lists dietary tags that contradict the allergens, e.g. 'vegan' on an item containing dairy."""
+    return [f"can't be {diet} because it contains {', '.join(sorted(DIET_EXCLUDES[diet] & set(allergens)))}"
+            for diet in sorted(preferences)
+            if DIET_EXCLUDES.get(diet, set()) & set(allergens)]
+
+
 def parse_expiry(value):
-    """Turns 'YYYY-MM-DD' (or a date, or None/'') into a date or None. Raises ValueError if invalid."""
+    """Turns 'YYYY-MM-DD' or 'DD/MM/YYYY' (or a date, or None/'') into a date or None.
+
+    Raises ValueError if invalid. DD/MM/YYYY is accepted because that's how dates are
+    written on Australian packaging (WF-04).
+    """
     if value is None or value == "":
         return None
     if isinstance(value, date):
         return value
-    try:
-        return date.fromisoformat(str(value).strip())
-    except ValueError:
-        raise ValueError(f"Expiry date must look like YYYY-MM-DD, got '{value}'")
+    text = str(value).strip()
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(text, fmt).date()
+        except ValueError:
+            pass
+    raise ValueError(f"Expiry date must look like DD/MM/YYYY or YYYY-MM-DD, got '{value}'")
 
 
 def clean_quantity(quantity):
@@ -122,10 +140,18 @@ class FoodbankItem:
                 reasons.append(f"may contain {allergen} (severe allergy)")
         return reasons
 
+    def suitable_diets(self):
+        """The item's dietary tags, minus any its allergens contradict.
+
+        A batch tagged 'vegan' that lists dairy is never treated as vegan, even if it was
+        entered that way before the donation check existed (WF-02).
+        """
+        return {p for p in self.preferences if not DIET_EXCLUDES.get(p, set()) & self.allergens}
+
     def is_safe_for(self, client_allergies, client_preferences):
         """True if there are no allergy conflicts and the item meets all the client's preferences."""
         no_conflicts = not self.allergy_conflicts(client_allergies)
-        meets_prefs = set(client_preferences).issubset(self.preferences)
+        meets_prefs = set(client_preferences).issubset(self.suitable_diets())
         return no_conflicts and meets_prefs
 
     def to_dict(self):
@@ -138,4 +164,4 @@ class FoodbankItem:
             "quantity": self.quantity,
             "expiry": self.expiry.isoformat() if self.expiry else None,
             "condition": self.condition,
-        }
+        }

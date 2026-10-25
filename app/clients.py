@@ -2,7 +2,7 @@
 # group: Team 17
 # names: Chiara, Harry
 # created: 29/09/26
-# last modified: 16/10/26
+# last modified: 25/10/26
 
 from datetime import date
 
@@ -14,6 +14,24 @@ SEVERITIES = ("mild", "moderate", "severe")
 
 # How the client would like to be contacted (FR-08)
 CONTACT_METHODS = ("sms", "phone call", "email", "in person")
+
+# A phone number can use spaces, brackets, hyphens and a leading + but must have
+# this many digits (WF-03). 8 covers landlines without an area code, 12 covers +61.
+PHONE_DIGITS = (8, 12)
+
+
+def clean_phone(phone):
+    """Checks a phone number looks real. Blank means no phone. Raises ValueError otherwise."""
+    phone = str(phone or "").strip()
+    if not phone:
+        return ""
+    allowed = set("0123456789 ()-")
+    body = phone[1:] if phone.startswith("+") else phone
+    digits = sum(ch.isdigit() for ch in body)
+    if set(body) - allowed or not PHONE_DIGITS[0] <= digits <= PHONE_DIGITS[1]:
+        raise ValueError(f"Phone number must have {PHONE_DIGITS[0]} to {PHONE_DIGITS[1]} digits "
+                         f"(spaces allowed), got '{phone}'")
+    return phone
 
 # Accessibility needs staff can record (FR-07). Kept as a fixed list so they can be
 # picked by number instead of typed, which avoids spelling mistakes.
@@ -38,7 +56,7 @@ class Client:
             raise ValueError("Client name cannot be empty")
         self.id = id
         self.name = str(name).strip()
-        self.phone = str(phone).strip()
+        self.phone = clean_phone(phone)
         self.email = str(email or "").strip()
         self.allergies = self._clean_allergies(allergies)  # e.g. {"peanuts": "severe"}
         self.preferences = self._clean_preferences(preferences)  # diets followed, e.g. "vegan"

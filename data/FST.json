@@ -180,7 +180,8 @@
             "id": 8,
             "name": "Biscoff",
             "allergens": [
-                "dairy"
+                "gluten",
+                "soy"
             ],
             "may_contain": [],
             "preferences": [
@@ -209,4 +210,4 @@
     "next_item_id": 9,
     "next_hamper_id": 1,
     "next_pickup_id": 1
-}
+}

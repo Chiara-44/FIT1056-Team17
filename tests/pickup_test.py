@@ -238,7 +238,7 @@ def test_pickup_label_hides_private_details(tmp_path):
     pickup = manager.schedule_pickup(1, LATER, now=NOW)
     label = manager.pickup_label(pickup, now=NOW)
     assert "Client #1 (Maya)" in label and "14:30" in label
-    for private in ("Donald", "0400", "peanut", "vegan", "severe"):
+    for private in ("Donald", "0400 000 000", "peanut", "vegan", "severe"):
         assert private not in label
 
 

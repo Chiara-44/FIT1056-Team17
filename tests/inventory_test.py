@@ -29,7 +29,7 @@ def write_data(tmp_path):
         "staff": [{"id": 1, "name": "Angela Bjork", "username": "angela",
                    "password": "staff123", "role": "staff"}],
         "admins": [],
-        "clients": [{"id": 1, "name": "Maya Donald", "phone": "0400",
+        "clients": [{"id": 1, "name": "Maya Donald", "phone": "0400 000 000",
                      "allergies": {"peanuts": "severe"}, "preferences": ["vegan"],
                      "household_size": 1}],
         "storeroom": [

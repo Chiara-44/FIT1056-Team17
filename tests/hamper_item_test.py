@@ -76,7 +76,7 @@ def make_manager(tmp_path):
     data = {
         "staff": [{"id": 1, "name": "Angela", "username": "angela",
                    "password_hash": hash_password("staff123"), "role": "staff"}],
-        "clients": [{"id": 1, "name": "Alex Nguyen", "phone": "0411", "allergies": {"peanuts": "severe"},
+        "clients": [{"id": 1, "name": "Alex Nguyen", "phone": "0411 111 111", "allergies": {"peanuts": "severe"},
                      "preferences": [], "household_size": 2}],
         "storeroom": [
             {"id": 1, "name": "Chickpeas", "allergens": [], "may_contain": [], "preferences": [],
