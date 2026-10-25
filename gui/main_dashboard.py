@@ -13,7 +13,11 @@ from app.schedule import ScheduleManager, ROLES
 def get_manager():
     if "manager" not in st.session_state:
         st.session_state.manager = ScheduleManager()
-    return st.session_state.manager
+    manager = st.session_state.manager
+    # Each browser session has its own manager, so load any changes saved by other
+    # sessions before this run uses the data (NFR-12).
+    manager.reload_if_changed()
+    return manager
 
 
 def show_first_admin_setup(manager):

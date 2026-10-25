@@ -131,7 +131,7 @@ def test_food_notes_length_boundary(length, valid):
 
 def test_packing_summary_has_food_info_but_no_private_details(tmp_path):
     manager, _ = staff_manager(tmp_path)
-    summary = manager.find_client(1).packing_summary()
+    summary = manager._lookup_client(1).packing_summary()
     assert "household of 2 (1 adult, 1 infant)" in summary   # infant matters for packing
     assert "prefers fresh vegetables" in summary
     for private in ("0400 000 000", "Donald", "help carrying", "Recently moved", "sms"):
@@ -140,7 +140,7 @@ def test_packing_summary_has_food_info_but_no_private_details(tmp_path):
 
 def test_staff_details_include_contact_access_and_notes(tmp_path):
     manager, _ = staff_manager(tmp_path)
-    details = manager.find_client(1).staff_details()
+    details = manager._lookup_client(1).staff_details()
     for shown in ("Maya Donald", "0400 000 000", "sms", "help carrying", "Recently moved"):
         assert shown in details
 
@@ -153,7 +153,7 @@ def test_new_fields_survive_save_and_reload(tmp_path):
                        household={"adults": 2, "infants": 1}, email="j@example.com",
                        contact_method="email", accessibility_needs=["interpreter"],
                        food_notes="no pork", language="Arabic")
-    client = ScheduleManager(str(path)).find_client(2)
+    client = ScheduleManager(str(path))._lookup_client(2)
     assert client.household == {"adults": 2, "children": 0, "infants": 1}
     assert client.contact_method == "email" and client.email == "j@example.com"
     assert client.accessibility_needs == {"interpreter"}
@@ -164,7 +164,7 @@ def test_old_client_record_still_loads(tmp_path):
     path = write_data(tmp_path, clients=[
         {"id": 1, "name": "Alex Nguyen", "phone": "0411 111 111", "allergies": {"dairy": "mild"},
          "preferences": [], "household_size": 3}])
-    client = ScheduleManager(str(path)).find_client(1)
+    client = ScheduleManager(str(path))._lookup_client(1)
     assert client.household_size == 3 and client.contact_method == "sms"
 
 
@@ -173,7 +173,7 @@ def test_old_client_record_still_loads(tmp_path):
 def test_update_client_changes_and_saves(tmp_path):
     manager, path = staff_manager(tmp_path)
     manager.update_client(1, household={"adults": 1, "children": 2}, language="Vietnamese")
-    client = ScheduleManager(str(path)).find_client(1)
+    client = ScheduleManager(str(path))._lookup_client(1)
     assert client.household_size == 3 and client.language == "Vietnamese"
     assert client.private_notes[0]["text"] == "Recently moved"   # notes kept
 
@@ -182,7 +182,7 @@ def test_invalid_update_leaves_client_unchanged(tmp_path):
     manager, _ = staff_manager(tmp_path)
     with pytest.raises(ValueError):
         manager.update_client(1, phone="", language="French")   # sms needs a phone
-    client = manager.find_client(1)
+    client = manager._lookup_client(1)
     assert client.phone == "0400 000 000" and client.language == "English"
 
 
@@ -209,7 +209,7 @@ def test_volunteer_cannot_edit_or_add_notes(tmp_path):
 def test_add_private_note_records_author(tmp_path):
     manager, path = staff_manager(tmp_path)
     manager.add_client_note(1, "  Can only come after 5pm  ")
-    note = ScheduleManager(str(path)).find_client(1).private_notes[-1]
+    note = ScheduleManager(str(path))._lookup_client(1).private_notes[-1]
     assert note["text"] == "Can only come after 5pm" and note["by"] == "angela"
 
 

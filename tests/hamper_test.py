@@ -259,7 +259,7 @@ def test_volunteer_cannot_record_donation(tmp_path):
 
 def test_packing_summary_hides_contact_details(tmp_path):
     manager, _ = make_manager(tmp_path)
-    summary = manager.find_client(1).packing_summary()
+    summary = manager._lookup_client(1).packing_summary()
     assert "0400 000 000" not in summary and "Donald" not in summary
     assert "peanuts (severe)" in summary
 

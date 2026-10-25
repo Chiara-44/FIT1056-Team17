@@ -168,11 +168,12 @@ def record_donation_screen(manager):
 def list_clients(manager):
     """Staff and admins see contact details; packers only see what they need to pack."""
     print("\n--- Clients ---")
-    if not manager.clients:
+    clients = manager.list_clients()
+    if not clients:
         print("No clients yet.")
         return
     full_view = manager.can("manage_clients")
-    for client in manager.clients:
+    for client in clients:
         if full_view:
             print(f"#{client.id} {client.name}  phone: {client.phone or '-'}")
             print("   " + client.packing_summary().split("\n", 1)[1].replace("\n", "\n   "))
@@ -757,6 +758,7 @@ def main_menu(manager):
             manager.logout()
             return False
 
+        manager.reload_if_changed()  # pick up saves from other copies of the program
         match = next((o for o in options if o[0] == choice), None)
         if match is None:
             print("Please choose one of the options shown.")

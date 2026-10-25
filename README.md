@@ -1,8 +1,8 @@
 # FoodShare Tracker (FIT1056 Team 17)
 
-A command-line system that helps a community food bank record donations, track stock and
-prepare food hampers that are safe for each client's allergies and dietary needs, while
-keeping client information private.
+A Python system with a command-line interface and a Streamlit web interface that helps a
+community food bank record donations, track stock and prepare food hampers that are safe for
+each client's allergies and dietary needs, while keeping client information private.
 
 ## How to run
 
@@ -30,8 +30,8 @@ interfaces use the same rules and the same data file, so you can switch between 
 | Staff     | `priya`  | `staff123`|
 | Admin     | `admin`  | `admin123`|
 
-The sample data file stores these as plain-text passwords. They are replaced with salted
-hashes automatically the first time the app loads the file.
+The sample data file stores salted PBKDF2 hashes of these passwords, not the passwords
+themselves. If a file with plain-text passwords is loaded, they are hashed straight away.
 
 ### Run the tests
 
@@ -65,92 +65,55 @@ python -m pytest
 | Daily backups | The first save each day copies the data file to `data/backups/` (the newest 14 are kept). | NFR-11 |
 | Audit log | Donations, stock adjustments, completed hampers, client changes, private notes, pickups and role changes are recorded with who did them and when. Admins can view the log. | Accountability |
 | Consent | Before registering a client, staff are told why each detail is needed and must confirm the client agrees to their details being stored. Without it nothing is saved. The consent date is shown on the client's profile. | NFR-03 |
+| Readable colours | The Streamlit theme in `.streamlit/config.toml` sets text, caption and button colours with a contrast ratio of at least 4.5:1 (WCAG 2.1 AA). The default red buttons only reached 3.3:1. Run Streamlit from the project folder so the theme is picked up. | NFR-09 |
 | Fair hamper allowance | Every household gets the same allowance of 5 items per person (`ITEMS_PER_PERSON` in `app/clients.py`). The packing screen shows how much of the allowance is used, and adding past it is refused. | NFR-13 |
 
 ## App
+
+All business rules live in `app/`. Both interfaces only call `ScheduleManager`, so permissions,
+allergy checks and stock limits are enforced in one place.
+
 ### clients.py
-***SEVERITIES:***
-This is a list used to ensure that allergies are one of the three; "mild", "moderate" or "severe" 
-
-
-***Client [CLASS]:*** This is a struct that holds a foodbank client and their dietary needs. 
-
-***def _clean_allergies(self, allergies):*** This funciton takes in a list of dicts of allergies and their severities, ensures they are consistent with what is tracked in the program and "cleans" them for consistent storage bewteen items.
-
-***def severe_allergies(self):*** Returns any severe allergies that the client may have.
-
-***def can_have(self, item):*** Returns true if the passed item is safe for the client to consume.
-
-***def to_dict(self):*** Converts the struct into a dicts to be stored in the FST.json file.
-
+- `Client`: a client's household (adults, children, infants), allergies with severity, dietary
+  needs, food notes, language, accessibility needs, contact details, consent date and staff-only
+  private notes. Every value is validated in the constructor.
+- `packing_summary()`: client number, first name, household and food needs only (NFR-02).
+- `staff_details()`: the full profile, including private notes, for staff and admins.
+- `hamper_allowance`: `ITEMS_PER_PERSON` (5) multiplied by household size (NFR-13).
+- `ClientPackingView`: what volunteers receive instead of a `Client`. Asking it for contact
+  details, accessibility needs or notes raises `PermissionError` (NFR-02, NFR-15).
 
 ### schedule.py
-***ROLES*** List of valid roles.
-
-
-***ScheduleManager [CLASS]*** The main controller for all business logic and data handling. 
-
-**def _build_users(self, records, role):*** Converts users stored in FST.json to struct for use in program.
-
-***def _build_clients(self, records):*** Converts clients stored in FST.json to struct for use in program.
-
-***def _build_items(self, records):*** Converts items stored in FST.json to struct for use in program.
-
-***def _load_data(self):*** Loads all data from FST.json into various datatypes to be directly accessed from the program.
-
-***def _save_data(self):*** Saves all structs and releveant datatypes to the FST.json file for persistent storage
-
-***def _users_for_role(self, role):*** Helper function that returns the relevenat users within a role.
-
-***def login(self, username, password, role):*** Returns the matching User and sets current_user, or None if login fails. any information about the user can now be accessed by manager.current_user.[whatever you want here].
-
-***def logout(self):*** Sets current_user to None. (logs user out)
-
-
-***def add_user(self, name, username, password, role):*** adds a user to the memory. Hashes the password for safety and security.
-
-
-***def add_client(self, name, phone, allergies, preferences, household_size=1):*** This function adds a client and increments the client_id.
-
-***def find_client(self, client_id):*** finds a client by their ID. Returns None if cannot find 
-
-***def add_item(self, name, allergens, may_contain, preferences, quantity=0):*** Adds an item and increments the item_id counter.
-
-***def find_item(self, item_id):*** Finds an item by it's ID and returns None if it cannot be found
-
-***def safe_items_for(self, client):*** Returns a list of In-stock items that are safe for this client.
-
+- `ScheduleManager`: loads and saves `data/FST.json`, checks permissions with
+  `require_permission()` at the start of every protected action, and holds the rules for clients,
+  stock, donations, hampers, pickups, tasks, users and reports.
+- `add_client(name, phone, allergies, preferences, household_size=1, consent=True, **details)`:
+  refuses to save a client unless consent is given (NFR-03).
+- `find_client(id)` / `list_clients()`: full records for staff and admins, `ClientPackingView`
+  objects for volunteers.
+- `create_hamper()`, `add_hamper_item()`, `substitute_item()`, `complete_hamper()`: hamper
+  packing. Every item goes through `_check_item_allowed()` (allergies, diet, expiry, condition,
+  stock and allowance), and completion is all-or-nothing.
+- `_save_data()`: writes to a temporary file and swaps it in (NFR-11), keeps daily backups, and
+  refuses to save if another session saved first; `reload_if_changed()` loads the newer data (NFR-12).
+- `generate_report(type)`: stock, expiry (expired and within 7 days), shortages, donations and
+  hampers (FR-28 to FR-32, admins only).
 
 ### storeroom.py
-***ALLERGENS*** A list of all recorded allergens tracked in the system
+- `FoodbankItem`: a batch of stock with allergens, "may contain" traces, dietary tags, quantity,
+  expiry date and condition.
+- `allergy_conflicts(client_allergies)`: an item that contains a client's allergen is blocked at
+  any severity; an item that "may contain" it is blocked when the allergy is severe.
 
-***PREFERENCES*** A list of all recorded food preferences tracked in the system
-
-***def clean_allergens(names):*** Lowercases allergen names and checks they're in ALLERGENS. Raises ValueError on a typo.
-
-***FoodbankItem [CLASS]*** Holds an item stored in the foodbank storeroom
-
-***def allergy_conflicts(self, client_allergies):*** Returns a list of reasons this item is unsafe for the client's allergies.
-        An empty list means no allergy conflict.
-client_allergies is a dict like {"peanuts": "severe", "dairy": "mild"}.
-
-        - Contains an allergen the client has (any severity)  -> blocked
-        - May contain an allergen the client has as severe    -> blocked
-
-***def is_safe_for(self, client_allergies, client_preferences):*** True if there are no allergy conflicts and the item meets all the client's preferences.
-
-***def to_dict(self):*** Converts the struct into dicts to be stored in the FST.json file.
+### hampers.py, pickups.py, tasks.py
+- `Hamper` and `HamperItem`: hamper lines, quantities, recorded substitutions and status.
+- `Pickup`: a booked collection time and whether it has been collected.
+- `Task` and `StockReport`: volunteer tasks and reports of damaged, expired or missing stock.
 
 ### users.py
-***PERMISSIONS*** A dict that store all permission that each role has access to.
-
-***User [CLASS]***
-
-***def set_password(self, password):***
-
-***def check_password(self, password):***
-
-***def to_dict(self):***
+- `PERMISSIONS`: the actions each role may perform (volunteer, staff, admin).
+- `User`: one class with a role. `set_password()` stores a salted PBKDF2-SHA256 hash and
+  `check_password()` compares hashes in constant time.
 
 ## Project structure
 
@@ -184,13 +147,16 @@ client_allergies is a dict like {"peanuts": "severe", "dairy": "mild"}.
 │   ├── security_test.py           Inactivity logout, daily backups and the audit log
 │   ├── usability_fix_test.py      Fixes from the usability walkthrough (allergy confirmation, diet tags, phone, dates)
 │   ├── human_centred_test.py      Consent before registering a client and the same hamper allowance per person
-│   ├── performance_test.py        Response times with 10,000 stock records and 10 users (NFR-04, NFR-05)
+│   ├── performance_test.py        Response times with 10,000 stock records and 10 threads (NFR-04, NFR-05)
+│   ├── review_fix_test.py         Two sessions saving at once, client privacy in the service layer, expiry report
 │   ├── client_test.py             Household, contact method, editing, private notes, privacy
 │   ├── password_test.py           Password hashing and login
 │   ├── pickup_test.py             Booking, collection, privacy and boundary tests for pickups
 │   ├── report_test.py             Operational reports, permissions and boundaries
-│   ├── task_test.py               Volunteer tasks, permissions, stock reports, 
+│   ├── task_test.py               Volunteer tasks, permissions, stock reports
 │   └── test_schedule.py           First-admin setup and donation merging rules
+├── .streamlit
+│   └── config.toml    Colour theme with readable contrast (NFR-09)
 ├── conftest.py        Lets pytest find the app package
 ├── main.py            Command-line menus
 ├── README.md
@@ -200,7 +166,10 @@ client_allergies is a dict like {"peanuts": "severe", "dairy": "mild"}.
 ## Known issues and limitations
 - The graphical interface uses Streamlit instead of the Tkinter GUI planned in Deliverable 1,
   and data is stored in JSON rather than SQLite. The command-line interface is still included.
-- Only one copy of the app should run at a time. Two copies would overwrite each other's saves.
+- Several copies of the app, or several browser sessions, can use the same data file. Each one
+  reloads newer data before acting, and a save is refused (with a message to try again) if
+  another session saved first. The file is still meant for one site; a database would be needed
+  for several sites.
 - If the app is closed while a hamper is being packed, that draft hamper stays in the data
   file. It doesn't affect stock.
 - In some IDE consoles (for example IDLE), the password may still be visible while typing.

@@ -251,3 +251,32 @@ class Client:
             "private_notes": list(self.private_notes),
             "consent_date": self.consent_date,
         }
+
+
+class ClientPackingView:
+    """Read-only view of a client for users without manage_clients (NFR-02, NFR-15).
+
+    ScheduleManager hands this to volunteers instead of the Client object, so the
+    service layer itself hides contact details, accessibility needs and private notes.
+    Asking for anything else raises PermissionError.
+    """
+
+    VISIBLE = {"id", "allergies", "preferences", "household", "household_size",
+               "hamper_allowance", "household_text", "severe_allergies",
+               "packing_summary", "can_have", "food_notes"}
+
+    def __init__(self, client):
+        object.__setattr__(self, "_client", client)
+
+    @property
+    def name(self):
+        """First name only, as shown at a shared counter."""
+        return self._client.name.split()[0]
+
+    def __getattr__(self, attribute):
+        if attribute in ClientPackingView.VISIBLE:
+            return getattr(self._client, attribute)
+        raise PermissionError("Only staff can see this client detail")
+
+    def __setattr__(self, attribute, value):
+        raise PermissionError("Client details can only be changed by staff")

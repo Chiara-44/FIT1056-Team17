@@ -13,10 +13,9 @@ HASH_PREFIX = "pbkdf2_sha256"
 ITERATIONS = 200_000
 
 
-# This is an example of how we could do it and just have the options render based on what the permissions are
-# available to the role. This also means we can have just one struct for volunteers, staff and admin.
+# Each role maps to the actions it may perform. Menus only show the options a role has, and one User class
+# covers volunteers, staff and admins. Admins do not pack hampers and only admins run reports.
 # Enforced by ScheduleManager.require_permission() at the start of every protected action (FR-03).
-# TODO: Agree whether admins can pack hampers and whether staff can run reports.
 PERMISSIONS = {
     "volunteer": {"view_own_tasks", "update_task", "report_stock", "pack_hamper", "record_pickup"},
     "staff": {"view_own_tasks", "update_task", "report_stock", "pack_hamper", "record_pickup",

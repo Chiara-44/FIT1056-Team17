@@ -77,7 +77,7 @@ def test_client_record_without_allergies_loads(tmp_path):
     path = tmp_path / "data.json"
     path.write_text(json.dumps({"clients": [{"id": 1, "name": "Sam", "phone": ""}]}))
     manager = ScheduleManager(str(path))
-    assert manager.find_client(1).allergies == {}
+    assert manager._lookup_client(1).allergies == {}
 
 
 def test_severe_allergies_listed_for_packer_warning():

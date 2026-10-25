@@ -1,0 +1,13 @@
+# Colour theme for the Streamlit interface (NFR-09: readable colour contrast).
+# Contrast ratios against WCAG 2.1 AA (needs 4.5:1 for normal text):
+#   body text #111111 on white            18.9:1
+#   body text on the sidebar (#F0F2F6)    16.9:1
+#   captions (Streamlit draws them at 60% of the text colour) 4.9:1 on white, 4.8:1 on the sidebar
+#   white text on buttons (#1F5FA8)        6.4:1
+# The default theme's red buttons (#FF4B4B) only reached 3.3:1, so they are replaced with blue.
+[theme]
+base = "light"
+primaryColor = "#1F5FA8"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F0F2F6"
+textColor = "#111111"

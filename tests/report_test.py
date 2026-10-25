@@ -100,14 +100,14 @@ def test_stock_report_lists_every_item_with_quantity(admin):
         ("Milk", 9), ("Bread", 10), ("Rice", 30), ("Salt", 0)}
 
 
-# ---------- FR-29 Expiry (BVA around today) ----------
+# ---------- FR-29 Expiry (expired, and expiring within 7 days) ----------
 
 def test_expiry_report_boundary(admin):
-    names = {r["name"] for r in admin.generate_report("expiry")}
-    assert "Milk" in names          # BVA: expired yesterday
-    assert "Bread" in names         # BVA: expires today
-    assert "Rice" not in names      # BVA: expires tomorrow
-    assert "Salt" not in names      # EP: no expiry date
+    rows = {r["name"]: r["status"] for r in admin.generate_report("expiry")}
+    assert rows["Milk"] == "expired"        # BVA: expired yesterday
+    assert rows["Bread"] == "near expiry"   # BVA: expires today
+    assert rows["Rice"] == "near expiry"    # expires tomorrow, inside the 7-day window
+    assert "Salt" not in rows               # EP: no expiry date
 
 
 # ---------- FR-30 Shortages (BVA around 10) ----------

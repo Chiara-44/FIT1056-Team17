@@ -11,9 +11,9 @@ import shutil
 from datetime import date, datetime, timedelta
 
 from app.users import User, hash_password, PERMISSIONS
-from app.clients import Client, ITEMS_PER_PERSON
+from app.clients import Client, ClientPackingView, ITEMS_PER_PERSON
 from app.storeroom import (FoodbankItem, clean_quantity, clean_allergens, parse_expiry,
-                           diet_conflicts, CONDITIONS, FLAGS)
+                           diet_conflicts, CONDITIONS, FLAGS, NEAR_EXPIRY_DAYS)
 from app.hampers import Hamper, COMPLETED
 from app.pickups import Pickup, parse_pickup_time
 from app.tasks import Task, StockReport
@@ -74,6 +74,7 @@ class ScheduleManager:
 
         self.current_user = None
         self._needs_resave = False
+        self._file_stamp = None  # (modified time, size) of the data file when last read or written
 
         self._load_data()
 
@@ -165,7 +166,6 @@ class ScheduleManager:
 
     # ---------- Load / save ----------
 
-    # TODO: Validate record types, required fields and ID counters before accepting data.
     def _load_data(self):
         """Loads data from the JSON file and populates the object lists.
 
@@ -182,6 +182,7 @@ class ScheduleManager:
         except json.JSONDecodeError as e:
             raise ValueError(f"Data file '{self.data_path}' is not valid JSON ({e}). "
                              "Fix or restore the file before starting.")
+        self._file_stamp = self._stamp()
 
         try:
             self.volunteers = self._build_users(data.get("volunteers", []), "volunteer")
@@ -214,12 +215,43 @@ class ScheduleManager:
             self._save_data()
             self._needs_resave = False
 
+    def _stamp(self):
+        """Modified time and size of the data file, or None if it doesn't exist yet."""
+        try:
+            info = os.stat(self.data_path)
+        except FileNotFoundError:
+            return None
+        return (info.st_mtime_ns, info.st_size)
+
+    def reload_if_changed(self):
+        """Reloads the data if another session has saved since we last read it (NFR-12).
+
+        The Streamlit pages call this at the start of every run, so each browser
+        session works on the latest data. The logged-in user stays logged in.
+        """
+        if self._stamp() == self._file_stamp:
+            return False
+        user = self.current_user
+        self._load_data()
+        if user is not None:
+            self.current_user = next((u for u in self._users_for_role(user.role)
+                                      if u.username == user.username), None)
+        return True
+
     def _save_data(self):
         """Converts object lists back to dictionaries and saves to JSON.
 
         Writes to a temporary file first and then swaps it in, so a crash part-way
         through saving can't leave a half-written data file (NFR-11).
+
+        If another session saved after this one last read the file, nothing is
+        written: the latest data is reloaded and a ValueError asks the user to try
+        again, so one person's save can't silently wipe out another's (NFR-12).
         """
+        if self._stamp() != self._file_stamp:
+            self.reload_if_changed()
+            raise ValueError("Someone else saved changes at the same time, so this change "
+                             "was not saved. The latest data has been loaded; please try again.")
         data_to_save = {
             "volunteers": [u.to_dict() for u in self.volunteers],
             "staff": [u.to_dict() for u in self.staff],
@@ -252,6 +284,7 @@ class ScheduleManager:
             json.dump(data_to_save, f, indent=4)
         self._backup_today()
         os.replace(temp_path, self.data_path)
+        self._file_stamp = self._stamp()
 
     def _backup_today(self):
         """Copies the current data file into a dated backup once per day (NFR-11).
@@ -414,14 +447,43 @@ class ScheduleManager:
         self._save_data()
         return client
 
-    def find_client(self, client_id):
+    def _lookup_client(self, client_id):
+        """Internal lookup with no permission check, for use inside the service layer."""
         for client in self.clients:
             if client.id == client_id:
                 return client
         return None
 
+    def _client_for_user(self, client):
+        """Full record for manage_clients, a packing view for everyone else (NFR-02)."""
+        if client is None or self.can("manage_clients"):
+            return client
+        self.require_permission("pack_hamper", "record_pickup")
+        return ClientPackingView(client)
+
+    def find_client(self, client_id):
+        """Returns the client as the current user is allowed to see them (NFR-02, NFR-15).
+
+        Staff and admins get the full record. Volunteers get a ClientPackingView that
+        only exposes food needs, household size and first name.
+        """
+        return self._client_for_user(self._lookup_client(client_id))
+
+    def list_clients(self):
+        """All clients, limited to what the current user may see (NFR-02)."""
+        if self.can("manage_clients"):
+            return list(self.clients)
+        self.require_permission("pack_hamper", "record_pickup")
+        return [ClientPackingView(c) for c in self.clients]
+
+    def get_client_for_packing(self, client_id):
+        """Packing view of one client for anyone who can pack hampers (FR-15, NFR-02)."""
+        self.require_permission("pack_hamper", "create_hamper", "manage_clients")
+        client = self._lookup_client(client_id)
+        return ClientPackingView(client) if client is not None else None
+
     def _get_client(self, client_id):
-        client = self.find_client(client_id)
+        client = self._lookup_client(client_id)
         if client is None:
             raise ValueError(f"No client with number {client_id}")
         return client
@@ -739,7 +801,7 @@ class ScheduleManager:
         Shows the pickup number, time, client number and first name only. No allergies,
         dietary needs, phone numbers or other private details.
         """
-        client = self.find_client(pickup.client_id)
+        client = self._lookup_client(pickup.client_id)
         first_name = client.name.split()[0] if client else "Unknown"
         status = pickup.status
         if pickup.is_overdue(now):
@@ -1056,10 +1118,14 @@ class ScheduleManager:
                     for item in self.storeroom]
                     
         elif report_type == "expiry":
-            # FR-29: Items that are expired or expiring today
+            # FR-29: Items that have expired or will expire within NEAR_EXPIRY_DAYS,
+            # using the same 7-day window that flags near-expiry stock elsewhere (FR-12)
             today = date.today()
-            return [{"id": item.id, "name": item.name, "quantity": item.quantity, "expiry": item.expiry.isoformat()} 
-                    for item in self.storeroom if item.expiry and item.expiry <= today]
+            limit = today + timedelta(days=NEAR_EXPIRY_DAYS)
+            return [{"id": item.id, "name": item.name, "quantity": item.quantity,
+                     "expiry": item.expiry.isoformat(),
+                     "status": "expired" if item.expiry < today else "near expiry"}
+                    for item in self.storeroom if item.expiry and item.expiry <= limit]
                     
         elif report_type == "shortages":
             # FR-30: Items with a dangerously low stock (under 10 items)

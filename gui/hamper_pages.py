@@ -5,13 +5,13 @@ from gui.common import run_action, display_client_label, display_item_label, dis
 
 def show_hamper_page(manager):
     st.title("Prepare hampers")
-    if not manager.clients:
+    if not manager.list_clients():
         st.info("Register a client before creating a hamper.")
         return
     create_tab, draft_tab, history_tab = st.tabs(["Start a hamper", "Pack a draft", "Hamper history"])
     with create_tab:
         with st.form("create_hamper_form"):
-            client = st.selectbox("Client", manager.clients, format_func=display_client_label)
+            client = st.selectbox("Client", manager.list_clients(), format_func=display_client_label)
             submitted = st.form_submit_button("Create draft hamper", type="primary")
         if submitted:
             hamper = run_action(lambda: manager.create_hamper(client.id), "Draft hamper created.")
@@ -25,7 +25,7 @@ def show_hamper_page(manager):
             hamper = st.selectbox("Draft hamper", drafts, format_func=display_hamper_label)
             client = manager.find_client(hamper.client_id)
             if client:
-                st.subheader(f"Client #{client.id} — {client.name.split()[0] if manager.current_user.role == 'volunteer' else client.name}")
+                st.subheader(f"Client #{client.id} — {client.name.split()[0]}")
                 st.write(client.packing_summary())
                 severe = client.severe_allergies()
                 if severe:
@@ -62,6 +62,19 @@ def show_hamper_page(manager):
                     result = run_action(lambda: manager.add_hamper_item(hamper.id, item.id, int(quantity)), "Item added to draft.")
                     if result:
                         st.rerun()
+                packed = [manager.find_item(int(i)) for i in hamper.items]
+                packed = [i for i in packed if i]
+                if packed:
+                    # Swap an item for a safe one; the system re-checks it and rolls back if unsafe (FR-18, FR-19)
+                    with st.form(f"substitute_{hamper.id}"):
+                        old_item = st.selectbox("Item to replace", packed, format_func=display_item_label)
+                        new_item = st.selectbox("Safe substitute", safe_items, format_func=display_item_label)
+                        swap = st.form_submit_button("Substitute item")
+                    if swap:
+                        note = run_action(lambda: manager.substitute_item(hamper.id, old_item.id, new_item.id),
+                                          "Item substituted.")
+                        if note:
+                            st.info("Note for the client: " + note)
             st.divider()
             st.warning("Completing a hamper deducts all included items from stock. Check every item and quantity first.")
             if st.button("Complete hamper and deduct stock", type="primary", key=f"complete_{hamper.id}"):
@@ -80,7 +93,7 @@ def show_hamper_page(manager):
             for hamper in manager.hampers:
                 client = manager.find_client(hamper.client_id)
                 rows.append({"Hamper": hamper.id, "Client": hamper.client_id,
-                             "Client name": client.name if client and manager.can("manage_clients") else (client.name.split()[0] if client and client.name else "Unknown"),
+                             "Client name": client.name.split()[0] if client else "Unknown",
                              "Status": hamper.status, "Items": hamper.total_items(),
                              "Packed by": hamper.packer_username})
             st.dataframe(rows, use_container_width=True, hide_index=True)
