@@ -2,7 +2,7 @@
 # group: Team 17
 # names: Harry
 # created: 16/10/26
-# last modified: 16/10/26
+# last modified: 25/10/26
 #
 # Tests for client profiles (F-02: FR-04 to FR-08, NFR-02, NFR-03, NFR-15).
 # Covers household composition, contact method, accessibility needs, food preferences,
@@ -241,7 +241,7 @@ def test_e2e_register_client_by_picking_from_lists(tmp_path):
     path = write_data(tmp_path)
     screen = run_app(path, [
         "staff", "angela", "staff123",
-        "4", "Jordan Lee",
+        "4", "y", "Jordan Lee",   # client has agreed to their details being stored
         "2", "", "1",           # 2 adults, 0 children, 1 infant
         "1",                    # dietary: halal
         "2", "2",               # allergy: eggs, moderate
@@ -262,7 +262,7 @@ def test_e2e_bad_pick_is_asked_again(tmp_path):
     path = write_data(tmp_path)
     screen = run_app(path, [
         "staff", "angela", "staff123",
-        "4", "Sam", "1", "", "",
+        "4", "y", "Sam", "1", "", "",
         "9",                    # dietary: out of range, asked again
         "",                     # then none
         "", "", "4", "", "", "", "q",

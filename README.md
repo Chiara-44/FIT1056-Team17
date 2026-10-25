@@ -64,6 +64,8 @@ python -m pytest
 | Inactivity logout | Users are logged out after 10 minutes without activity, in both interfaces, so a shared computer isn't left logged in. | NFR-02, NFR-15 |
 | Daily backups | The first save each day copies the data file to `data/backups/` (the newest 14 are kept). | NFR-11 |
 | Audit log | Donations, stock adjustments, completed hampers, client changes, private notes, pickups and role changes are recorded with who did them and when. Admins can view the log. | Accountability |
+| Consent | Before registering a client, staff are told why each detail is needed and must confirm the client agrees to their details being stored. Without it nothing is saved. The consent date is shown on the client's profile. | NFR-03 |
+| Fair hamper allowance | Every household gets the same allowance of 5 items per person (`ITEMS_PER_PERSON` in `app/clients.py`). The packing screen shows how much of the allowance is used, and adding past it is refused. | NFR-13 |
 
 ## App
 ### clients.py
@@ -181,6 +183,8 @@ client_allergies is a dict like {"peanuts": "severe", "dairy": "mild"}.
 │   ├── role_test.py               Changing a user's role
 │   ├── security_test.py           Inactivity logout, daily backups and the audit log
 │   ├── usability_fix_test.py      Fixes from the usability walkthrough (allergy confirmation, diet tags, phone, dates)
+│   ├── human_centred_test.py      Consent before registering a client and the same hamper allowance per person
+│   ├── performance_test.py        Response times with 10,000 stock records and 10 users (NFR-04, NFR-05)
 │   ├── client_test.py             Household, contact method, editing, private notes, privacy
 │   ├── password_test.py           Password hashing and login
 │   ├── pickup_test.py             Booking, collection, privacy and boundary tests for pickups

@@ -11,7 +11,7 @@ import shutil
 from datetime import date, datetime, timedelta
 
 from app.users import User, hash_password, PERMISSIONS
-from app.clients import Client
+from app.clients import Client, ITEMS_PER_PERSON
 from app.storeroom import (FoodbankItem, clean_quantity, clean_allergens, parse_expiry,
                            diet_conflicts, CONDITIONS, FLAGS)
 from app.hampers import Hamper, COMPLETED
@@ -113,6 +113,7 @@ class ScheduleManager:
                 food_notes=r.get("food_notes", ""),
                 language=r.get("language", ""),
                 private_notes=r.get("private_notes", []),
+                consent_date=r.get("consent_date"),
             )
             for r in records
         ]
@@ -390,16 +391,23 @@ class ScheduleManager:
 
     # ---------- Clients ----------
 
-    def add_client(self, name, phone, allergies, preferences, household_size=1, **details):
+    def add_client(self, name, phone, allergies, preferences, household_size=1, consent=True,
+                   **details):
         """Registers a client (FR-04, FR-06 to FR-08).
 
         details can include household (adults/children/infants), email, contact_method,
         accessibility_needs, food_notes and language. Only staff and admins can do this.
+        Both interfaces ask staff to confirm the client has agreed to their details being
+        stored and pass the answer as consent; without it nothing is saved (NFR-03).
         """
         self.require_permission("manage_clients")
+        if consent is not True:
+            raise ValueError("The client needs to agree to their details being stored "
+                             "before they can be registered")
         details.pop("private_notes", None)  # notes are added with add_client_note instead
+        details.pop("consent_date", None)
         client = Client(self.next_client_id, name, phone, allergies, preferences,
-                        household_size, **details)
+                        household_size, consent_date=date.today().isoformat(), **details)
         self.clients.append(client)
         self.next_client_id += 1
         self._audit("register client", f"client #{client.id}")
@@ -554,6 +562,11 @@ class ScheduleManager:
         available = item.quantity - hamper.quantity_of(item.id)
         if quantity > available:
             raise ValueError(f"Only {max(available, 0)} x {item.name} available")
+        allowance = client.hamper_allowance
+        if hamper.total_items() + quantity > allowance:
+            raise ValueError(f"This hamper can hold up to {allowance} items for a household of "
+                             f"{client.household_size} ({ITEMS_PER_PERSON} per person); "
+                             f"it already has {hamper.total_items()}")
 
     def add_hamper_item(self, hamper_id, item_id, quantity=1):
         """Adds stock to a draft hamper after all safety checks pass."""
@@ -811,7 +824,8 @@ class ScheduleManager:
                          email=data["email"], contact_method=data["contact_method"],
                          accessibility_needs=data["accessibility_needs"],
                          food_notes=data["food_notes"], language=data["language"],
-                         private_notes=client.private_notes)
+                         private_notes=client.private_notes,
+                         consent_date=client.consent_date)
         self.clients[self.clients.index(client)] = updated
         self._audit("update client", f"client #{client.id}: {', '.join(sorted(changes))}")
         self._save_data()

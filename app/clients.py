@@ -15,6 +15,10 @@ SEVERITIES = ("mild", "moderate", "severe")
 # How the client would like to be contacted (FR-08)
 CONTACT_METHODS = ("sms", "phone call", "email", "in person")
 
+# Hamper allowance: the same number of items per household member for every client,
+# so limited stock is shared out by one transparent rule (NFR-13, fairness).
+ITEMS_PER_PERSON = 5
+
 # A phone number can use spaces, brackets, hyphens and a leading + but must have
 # this many digits (WF-03). 8 covers landlines without an area code, 12 covers +61.
 PHONE_DIGITS = (8, 12)
@@ -51,7 +55,7 @@ class Client:
 
     def __init__(self, id, name, phone, allergies, preferences, household_size=1,
                  household=None, email="", contact_method=None, accessibility_needs=(),
-                 food_notes="", language="", private_notes=None):
+                 food_notes="", language="", private_notes=None, consent_date=None):
         if not str(name).strip():
             raise ValueError("Client name cannot be empty")
         self.id = id
@@ -67,6 +71,9 @@ class Client:
         self.language = self._clean_text(language, "Preferred language")
         self.contact_method = self._clean_contact_method(contact_method)
         self.private_notes = list(private_notes or [])  # [{"text", "by", "date"}], staff only
+        # Date the client agreed to their details being stored (privacy and consent).
+        # Records saved before the consent check was added have no date.
+        self.consent_date = str(consent_date) if consent_date else None
 
     # ---------- Validation helpers ----------
 
@@ -157,6 +164,11 @@ class Client:
         """Total number of people in the household."""
         return sum(self.household.values())
 
+    @property
+    def hamper_allowance(self):
+        """Most items one hamper can hold for this household (NFR-13)."""
+        return ITEMS_PER_PERSON * self.household_size
+
     def household_text(self):
         """e.g. '3 (2 adults, 1 infant)'."""
         parts = []
@@ -209,7 +221,9 @@ class Client:
                  f"  Phone: {self.phone or '-'}   Email: {self.email or '-'}",
                  f"  Preferred contact: {self.contact_method}",
                  f"  Preferred language: {self.language or '-'}",
-                 f"  Accessibility needs: {', '.join(sorted(self.accessibility_needs)) or 'none recorded'}"]
+                 f"  Accessibility needs: {', '.join(sorted(self.accessibility_needs)) or 'none recorded'}",
+                 f"  Consent to store details: "
+                 f"{'given on ' + self.consent_date if self.consent_date else 'not recorded'}"]
         if self.private_notes:
             lines.append("  Private notes (staff only):")
             for note in self.private_notes:
@@ -235,4 +249,5 @@ class Client:
             "food_notes": self.food_notes,
             "language": self.language,
             "private_notes": list(self.private_notes),
+            "consent_date": self.consent_date,
         }

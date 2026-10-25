@@ -28,6 +28,10 @@ def show_client_page(manager):
 
     tab1, tab2, tab3 = st.tabs(["Register client", "Find client", "Private notes"])
     with tab1:
+        st.caption("We only ask for what is needed to prepare safe, suitable food and to get in touch: "
+                   "name and household size for the hamper, dietary needs and allergies for safety, "
+                   "and one way to contact the client about pickups and substitutions. Language and "
+                   "accessibility needs are optional. Volunteers only see the first name and food needs.")
         with st.form("add_client_form"):
             name = st.text_input("Full name *")
             phone = st.text_input("Phone")
@@ -42,11 +46,12 @@ def show_client_page(manager):
             language = st.text_input("Preferred language")
             food_notes = st.text_area("Food-related notes (not private case notes)")
             allergies = _allergy_form()
+            consent = st.checkbox("The client has agreed to these details being stored")
             submitted = st.form_submit_button("Register client", type="primary")
         if submitted:
             client = run_action(
                 lambda: manager.add_client(
-                    name, phone, allergies, preferences, int(household_size),
+                    name, phone, allergies, preferences, int(household_size), consent=consent,
                     household={"adults": int(adults), "children": int(children), "infants": int(infants)},
                     email=email, contact_method=contact_method or None,
                     accessibility_needs=accessibility, food_notes=food_notes, language=language,

@@ -249,8 +249,15 @@ def ask_contact(phone, email):
 
 def add_client_screen(manager):
     print("\n--- Register a client ---")
-    print("We only ask for what we need to prepare safe, suitable food and to get in touch.")
-    print("Anything marked optional can be skipped.")
+    print("We only ask for what we need to prepare safe, suitable food and to get in touch:")
+    print("  - name and household size, so the hamper suits everyone at home")
+    print("  - dietary needs and allergies, so no unsafe food is packed")
+    print("  - one way to contact them, only about pickups and substitutions")
+    print("  - language and accessibility needs (optional), so we can help them more easily")
+    print("Volunteers who pack hampers only see their first name and food needs.")
+    if ask("Has the client agreed to us storing these details? (y/n): ").lower() not in ("y", "yes"):
+        print("Nothing was saved.")
+        return
     name = ask("Name (or the name they prefer to use): ")
     household = ask_household()
     print("Dietary needs:")
@@ -348,6 +355,10 @@ def show_hamper(manager, hamper):
         print(text)
     for note in hamper.substitution_notes:
         print(f"  Note for client: {note}")
+    client = manager.find_client(hamper.client_id)
+    if client:
+        print(f"  {hamper.total_items()} of {client.hamper_allowance} items "
+              f"(the same allowance per person for every household)")
 
 
 def show_safe_items(manager, client, hamper):

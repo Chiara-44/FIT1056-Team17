@@ -47,6 +47,9 @@ def show_hamper_page(manager):
                     if c2.button("Remove 1", key=f"remove_{hamper.id}_{item.id}"):
                         run_action(lambda: manager.remove_hamper_item(hamper.id, item.id, 1), "Item removed.")
                         st.rerun()
+            if client:
+                st.caption(f"{hamper.total_items()} of {client.hamper_allowance} items "
+                           "(every household gets the same allowance per person).")
             safe_items = manager.safe_items_for(client)
             if not safe_items:
                 st.info("There are no currently available items marked safe for this client.")
